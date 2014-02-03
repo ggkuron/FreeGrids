@@ -1,0 +1,5 @@
+.hsenv/
+*.hi
+.cabal
+*.o
+main
