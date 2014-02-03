@@ -1,0 +1,10 @@
+Name:   Grids
+Version: 0.0
+Description: 
+Build-Type: Simple
+Cabal-Version:  >=1.2
+Executable grids
+  Main-is:    main.hs
+  Build-Depends: base >= 2.0
+               , free-game >= 1.0
+    
