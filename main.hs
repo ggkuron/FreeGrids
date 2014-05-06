@@ -11,11 +11,17 @@ import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe)
 import Data.IORef
 import qualified Data.List as List
 
+import Paths_Grids
+
 defaultWidth, defaultHeight :: Double
 defaultWidth = 640
 defaultHeight = 480
 
+loadBitmapsWith [e|getDataFileName|] "img"
+
 type Coord = (Int,Int)
+
+-- bmp = readBitmap "img/front0.png"
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
 instance Num(Cell) where 
@@ -71,7 +77,7 @@ allDirection = [UP, LEFT, DOWN, RIGHT]
 
 origin = V2 0 0 
 
--- main :: IO (Maybe a)
+main :: IO (Maybe a)
 main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
     font <- embedIO $ loadFont "VL-Gothic-Regular.ttf"
     let ?font = font
@@ -96,26 +102,31 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl )) = do
 
         (current@(CurrentMap _ os cs)) <- embedIO $ readIORef io_field
 
-        mapM_ id [
-            color green
-                $ translate (V2 40 400)
-                $ text ?font 40 $ show hp
-            ,
-            color red 
-                $ ownCell origin whole_rect cell_long io_me io_field
-            ,
-            color yellow 
-                $ thickness 3 
-                $ renderGrids whole_rect cell_long
-            ,
-            color black 
-                $ translate (V2 150 150) 
-                $ text ?font 30 $ show c'
-            ,
-            color black 
-                $ translate (V2 40 40) 
-                $ text ?font 40 "Free World"
-            ]
+        -- bmp' <- bmp
+
+
+        translate (V2 50 50) $ bitmap _front0_png
+        -- translate (V2 100 100) $ text 20 "text"
+        --mapM_ id [
+        --    color green
+        --        $ translate (V2 40 400)
+        --        $ text ?font 40 $ show hp
+        --    ,
+        --    color red 
+        --        $ ownCell origin whole_rect cell_long io_me io_field
+        --    ,
+        --    color yellow 
+        --        $ thickness 3 
+        --        $ renderGrids whole_rect cell_long
+        --    ,
+        --    color black 
+        --        $ translate (V2 150 150) 
+        --        $ text ?font 30 $ show c'
+        --    ,
+        --    color black 
+        --        $ translate (V2 40 40) 
+        --        $ text ?font 40 "Free World"
+        --    ]
 
 key_map :: Map.Map Key Direct
 key_map = Map.fromList _tbl
