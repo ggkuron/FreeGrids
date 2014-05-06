@@ -6,6 +6,7 @@ import FreeGame
 import Control.Monad 
 import Control.Lens 
 import qualified Data.Map as Map
+import qualified Data.Array as Array
 import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe)
 import Data.IORef
 import qualified Data.List as List
@@ -14,57 +15,55 @@ defaultWidth, defaultHeight :: Double
 defaultWidth = 640
 defaultHeight = 480
 
-newtype Pair a b = Pair (a, b) deriving (Eq, Show)
-instance (Num a, Num b) => Num(Pair a b) where 
-    Pair (a,b) + Pair (c,d) = Pair (a+c, b+d)
-    Pair (a,b) * Pair (c,d) = Pair (a*c, b*d)
-    Pair (a,b) - Pair (c,d) = Pair (a-c, b-d)
-    abs (Pair (a,b)) = Pair (abs a, abs b)
-    signum (Pair (a,b)) = Pair (signum a, signum b) 
-    fromInteger i = Pair (fromInteger i, fromInteger i)
+type Coord = (Int,Int)
 
-type Cell = Pair Int Int
+newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
+instance Num(Cell) where 
+    Cell (a,b) + Cell (c,d) = Cell (a+c, b+d)
+    Cell (a,b) * Cell (c,d) = Cell (a*c, b*d)
+    Cell (a,b) - Cell (c,d) = Cell (a-c, b-d)
+    abs (Cell (a,b)) = Cell (abs a, abs b)
+    signum (Cell (a,b)) = Cell (signum a, signum b) 
+    fromInteger i = Cell (fromInteger i, fromInteger i)
+
 type Board = [Cell]
-type Point = Pair Double Double
 type Rect = (Double,Double,Double,Double)
 
-data CellBox = CellBox Cell Cell
 data Direct = UP | DOWN | LEFT | RIGHT deriving (Eq, Show)
 
+data FState = FNormal | FBlock 
+            deriving (Eq,Ord)
+
 data CharaEnty = CharaEnty {
-                   _hp :: Int
-                 , _dir :: Direct
-                 , _cellObj :: CellObj
+                   _hp :: Int ,
+                   _direct :: Direct ,
+                   _cellObj :: CellObj
 }
 
-class TimeObj a where
-    nextState :: Double -> a 
-
-
--- transTime :: Double
-type frame = [(Double, m ())]
 
 data CellObj = CellObj {
-                  _pos :: Cell
-                , _movable :: Bool
-                , _block :: Bool
-                , _transTime :: Double
-                -- , _state :: Int
+                  _pos :: Vec2,
+                  _cell :: Cell ,
+                  _movable :: Bool ,
+                  _block :: Bool 
 }
-
 
 data FieldMap = CurrentMap {
-                  _mpos :: Cell
-                , _mobj :: [CellObj]
-                , _mchr :: [CharaEnty]
+                  _mpos :: Cell ,
+                  _mobj :: [CellObj] ,
+                  _mchr :: [CharaEnty]
 }
+
+type Field = Array.Array Cell [FState]
+
+filedMap' = Map.fromList [(Cell (5,5),FBlock)]
 
 makeLenses ''CharaEnty
 makeLenses ''CellObj
 makeLenses ''FieldMap
 
-fieldMap = CurrentMap (Pair(5,5)) [CellObj (Pair(1,1)) False True 60
-                                  ,CellObj (Pair(2,2)) False True 60
+fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) False True 60
+                                  ,CellObj (Cell(2,2)) False True 60
                                   ] []
 
 allDirection :: [Direct]
@@ -74,11 +73,11 @@ main :: IO (Maybe a)
 main = runGame Windowed (BoundingBox 0 0 defaultWidth defaultHeight) $ do
     font <- embedIO $ loadFont "VL-Gothic-Regular.ttf"
     let ?font = font
-    let  scell = CharaEnty 100 RIGHT $ CellObj (Pair (3,3)) False True 60
+    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) False True 60
     mainLoop scell
 
 mainLoop :: (?font :: Font) => CharaEnty -> Game a
-mainLoop charaEnty@(CharaEnty hp mdir (CellObj cell mb bl _)) = do
+mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl _)) = do
     let origin = V2 0 0
         cell_long = 40
         thick = 2
@@ -89,14 +88,13 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj cell mb bl _)) = do
 
     foreverFrame $ do 
         color blue
-            $ fillCell (V2 0 0) 40 $ Pair (5,5)
+            $ fillCell (V2 0 0) 40 $ Cell (5,5)
         me <- embedIO $ readIORef io_me
-        let cell' = me ^. cellObj ^. pos
+        let c' = me ^. cellObj ^. cell
 
         (current@(CurrentMap _ os cs)) <- embedIO $ readIORef io_field
-        embedIO $ writeIORef io_field $ current&mobj.each.transTime -~ 1
 
-        mapM id [
+        mapM_ id [
             color green
                 $ translate (V2 40 400)
                 $ text ?font 40 $ show hp
@@ -110,7 +108,7 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj cell mb bl _)) = do
             ,
             color black 
                 $ translate (V2 150 150) 
-                $ text ?font 30 $ show cell'
+                $ text ?font 30 $ show c'
             ,
             color black 
                 $ translate (V2 40 40) 
@@ -132,37 +130,28 @@ turnBack DOWN  = UP
 
 ownCell :: (?font :: Font) => Vec2 -> Rect -> Double -> IORef CharaEnty -> IORef FieldMap -> Frame ()
 ownCell origin whole_rect cell_long io_me io_field = do
-    (CharaEnty hp mdir (CellObj cell mb bl ct)) <- embedIO $ readIORef io_me
+    me <- embedIO $ readIORef io_me
+    let hp = me ^. hp
+        dir = me ^. direct
+        mobj = me ^. cellObj
     (CurrentMap mcell fobj_ary fchars) <- embedIO $ readIORef io_field
 
-    current_inp <- filterM keyPress $ Map.keys key_map 
+    current_inp <- filterM keyDown $ Map.keys key_map 
     let inp_directs :: [Direct]
         inp_directs = map (\k -> fromJust $ Map.lookup k key_map) current_inp
-        obj_cells = map (^. pos) fobj_ary
-        blocked_dir = adjacentDirections obj_cells cell
-        ncell = sum_move cell inp_directs blocked_dir
-        mdir' = fromJust $ if ncell /= cell then adjacentDirection cell ncell else Just mdir
+        obj_cells = map (^. cell) fobj_ary
+        blocked_dir = adjacentDirections obj_cells (mobj^.cell)
+        ncell = sum_move (mobj^.cell) inp_directs blocked_dir
+        mdir' = fromJust $ if ncell /= (mobj^.cell) then adjacentDirection (mobj^.cell) ncell else Just dir
 
     ainp <- keyPress KeyA
-    when ainp $ fillCells origin cell_long $ peripheralCells cell 1
+    when ainp $ fillCells origin cell_long $ peripheralCells (mobj^.cell) 1
 
-    embedIO $ writeIORef io_me $ CharaEnty hp mdir' $ CellObj ncell mb bl 0
+    embedIO $ writeIORef io_me $ CharaEnty hp mdir' $ CellObj ncell (mobj^.block) (mobj^.movable) 
     color yellow $ fillCells origin cell_long obj_cells
     fillCell origin cell_long ncell
     color blue $ tCell origin cell_long ncell mdir' $ circle 5
 
-
-    -- embedIO $ modifyIORef io_field $ \f -> 
-
-
--- timeNew (CellObj p m b tt) t = CellObj p m b t
-
--- timePasses :: IORef FieldMap -> Double -> IORef FieldMap
--- timePasses ic t = do
-                                                   -- &mchr.each.cellObj.each.transTime -~ t 
-
--- thawJoin :: [a] -> [b] -> (b -> a) -> [a]
--- thawJoin a b thaw =  a ++ $ map thaw b
 
 sum_move :: Cell -> [Direct] -> [Direct] -> Cell
 sum_move c dirs filter_dir = let dirs' = dirs List.\\ filter_dir
@@ -211,57 +200,57 @@ directLine DOWN  = [LowerLeft , LowerRight]
 directLine RIGHT = [LowerRight, UpperRight]
 
 adjacentCell :: Cell -> Direct -> Cell
-adjacentCell (Pair (r,c)) UP    = Pair (r-1,c)
-adjacentCell (Pair (r,c)) DOWN  = Pair (r+1,c)
-adjacentCell (Pair (r,c)) LEFT  = Pair (r,c-1)
-adjacentCell (Pair (r,c)) RIGHT = Pair (r,c+1)
+adjacentCell (Cell (r,c)) UP    = Cell (r-1,c)
+adjacentCell (Cell (r,c)) DOWN  = Cell (r+1,c)
+adjacentCell (Cell (r,c)) LEFT  = Cell (r,c-1)
+adjacentCell (Cell (r,c)) RIGHT = Cell (r,c+1)
 
 celledge :: Cell -> Edge -> Cell
-celledge (Pair (r,c)) UpperLeft  = Pair (r, c) 
-celledge (Pair (r,c)) LowerLeft  = Pair (r, c+1)
-celledge (Pair (r,c)) LowerRight = Pair (r+1, c+1) 
-celledge (Pair (r,c)) UpperRight = Pair (r+1, c)   
+celledge (Cell (r,c)) UpperLeft  = Cell (r, c) 
+celledge (Cell (r,c)) LowerLeft  = Cell (r, c+1)
+celledge (Cell (r,c)) LowerRight = Cell (r+1, c+1) 
+celledge (Cell (r,c)) UpperRight = Cell (r+1, c)   
 
 adjacentDirection :: Cell -> Cell -> Maybe Direct
 adjacentDirection ours theirs = listToMaybe $ filter (\d -> adjacentCell ours d == theirs) allDirection 
 
 rectCell :: Vec2 -> Double -> Cell -> [Vec2]
-rectCell origin long cell = map (\e -> cornerPoint origin long e cell) allEdge
+rectCell origin long c = map (\e -> cornerPoint origin long e c) allEdge
 
-edgeIn o l cell = translate $ cornerPoint o l UpperLeft cell
+edgeIn o l c = translate $ cornerPoint o l UpperLeft c
 
 renderCellOutline :: Picture2D p => Vec2 -> Double -> Direct -> Cell -> p ()
-renderCellOutline origin long dir cell = line $ map (\edge -> cornerPoint origin long edge cell)  $ directLine dir
+renderCellOutline origin long dir c = line $ map (\edge -> cornerPoint origin long edge c)  $ directLine dir
 
 cornerPoint :: Vec2 -> Double -> Edge -> Cell -> Vec2
-cornerPoint origin long edge cell = let cpoint :: Cell -> Vec2
-                                        cpoint (Pair (r,c)) = origin + V2 (fromIntegral c * long) (fromIntegral r * long) 
-                                     in cpoint $ celledge cell edge
+cornerPoint origin long edge c = let cpoint :: Cell -> Vec2
+                                     cpoint (Cell (r,c)) = origin + V2 (fromIntegral c * long) (fromIntegral r * long) 
+                                     in cpoint $ celledge c edge
 
 fillCell :: Picture2D p => Vec2 -> Double -> Cell -> p () 
-fillCell origin long cell = polygon $ rectCell origin long cell 
+fillCell origin long c = polygon $ rectCell origin long c 
 
 tCell :: Affine p => Vec2 -> Double -> Cell -> Direct -> p a -> p a
-tCell origin long cell dir = translate $ (/4) . sum $ rectCell origin long $ adjacentCell cell dir
+tCell origin long c dir = translate $ (/4) . sum $ rectCell origin long $ adjacentCell c dir
 
 strokeCell :: Picture2D p => Vec2 -> Double -> Cell -> p ()
-strokeCell origin long cell = polygonOutline $ rectCell origin long cell 
+strokeCell origin long c = polygonOutline $ rectCell origin long c 
 
 fillCells :: (Monad p, Picture2D p) => Vec2 -> Double -> [Cell] -> p ()
-fillCells origin long cells = mapM_ (fillCell origin long) cells 
+fillCells origin long cs = mapM_ (fillCell origin long) cs 
 
 strokeCells :: (Monad p, Picture2D p) => Vec2 -> Double -> [Cell] -> p ()
-strokeCells origin long cells =
+strokeCells origin long cs =
     let  renderCellOutline' = renderCellOutline origin long
-         render c = let  adjacents = adjacentDirections cells c
+         render c = let  adjacents = adjacentDirections cs c
                     in mapM_ (\d -> renderCellOutline' d c) adjacents
-     in mapM_ render cells
+     in mapM_ render cs
 
 adjacentDirections :: Board -> Cell -> [Direct]
-adjacentDirections board cell = catMaybes $ map (adjacentDirection cell) board
+adjacentDirections board c = catMaybes $ map (adjacentDirection c) board
 
 peripheralCells :: Cell -> Int -> [Cell]
-peripheralCells (Pair (r,c)) w = [Pair (r',c') | r' <- [r-w..r+w] ,c' <- [c-w..c+w]]
+peripheralCells (Cell (r,c)) w = [Cell (r',c') | r' <- [r-w..r+w] ,c' <- [c-w..c+w]]
 
 adjacentCells :: Board -> Cell -> [Cell]
-adjacentCells board cell = filter (`elem` board) (peripheralCells cell 1)
+adjacentCells board c = filter (`elem` board) (peripheralCells c 1)
