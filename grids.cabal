@@ -1,8 +1,16 @@
 Name:   Grids
 Version: 0.0
+Synopsis: 
 Description: 
+HomePage:
+License: BSD3
+Author: ggkuron
+Copyright: 
+category: Game
 Build-Type: Simple
-Cabal-Version:  >=1.2
+Cabal-Version:  >=1.8
+data-files: images/*.png
+
 Executable grids
   Main-is:    main.hs
   Build-Depends: base >= 2.0
