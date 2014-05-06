@@ -1,4 +1,7 @@
 .hsenv/
+dist/
+.cabal-sandbox/
+cabal.sandbox.config
 *.hi
 .cabal
 *.o
