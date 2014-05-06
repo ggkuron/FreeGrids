@@ -42,7 +42,7 @@ data CharaEnty = CharaEnty {
 
 
 data CellObj = CellObj {
-                  _pos :: Vec2,
+                  -- _pos :: Vec2,
                   _cell :: Cell ,
                   _movable :: Bool ,
                   _block :: Bool 
@@ -62,22 +62,24 @@ makeLenses ''CharaEnty
 makeLenses ''CellObj
 makeLenses ''FieldMap
 
-fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) False True 60
-                                  ,CellObj (Cell(2,2)) False True 60
+fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) False True
+                                  ,CellObj (Cell(2,2)) False True
                                   ] []
 
 allDirection :: [Direct]
 allDirection = [UP, LEFT, DOWN, RIGHT]
 
-main :: IO (Maybe a)
-main = runGame Windowed (BoundingBox 0 0 defaultWidth defaultHeight) $ do
+origin = V2 0 0 
+
+-- main :: IO (Maybe a)
+main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
     font <- embedIO $ loadFont "VL-Gothic-Regular.ttf"
     let ?font = font
-    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) False True 60
+    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) False True
     mainLoop scell
 
 mainLoop :: (?font :: Font) => CharaEnty -> Game a
-mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl _)) = do
+mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl )) = do
     let origin = V2 0 0
         cell_long = 40
         thick = 2
@@ -131,8 +133,8 @@ turnBack DOWN  = UP
 ownCell :: (?font :: Font) => Vec2 -> Rect -> Double -> IORef CharaEnty -> IORef FieldMap -> Frame ()
 ownCell origin whole_rect cell_long io_me io_field = do
     me <- embedIO $ readIORef io_me
-    let hp = me ^. hp
-        dir = me ^. direct
+    let mhp = me ^. hp
+        mdir = me ^. direct
         mobj = me ^. cellObj
     (CurrentMap mcell fobj_ary fchars) <- embedIO $ readIORef io_field
 
@@ -142,12 +144,12 @@ ownCell origin whole_rect cell_long io_me io_field = do
         obj_cells = map (^. cell) fobj_ary
         blocked_dir = adjacentDirections obj_cells (mobj^.cell)
         ncell = sum_move (mobj^.cell) inp_directs blocked_dir
-        mdir' = fromJust $ if ncell /= (mobj^.cell) then adjacentDirection (mobj^.cell) ncell else Just dir
+        mdir' = fromJust $ if ncell /= (mobj^.cell) then adjacentDirection (mobj^.cell) ncell else Just mdir
 
     ainp <- keyPress KeyA
     when ainp $ fillCells origin cell_long $ peripheralCells (mobj^.cell) 1
 
-    embedIO $ writeIORef io_me $ CharaEnty hp mdir' $ CellObj ncell (mobj^.block) (mobj^.movable) 
+    embedIO $ writeIORef io_me $ CharaEnty mhp mdir' $ CellObj ncell (mobj^.block) (mobj^.movable) 
     color yellow $ fillCells origin cell_long obj_cells
     fillCell origin cell_long ncell
     color blue $ tCell origin cell_long ncell mdir' $ circle 5
