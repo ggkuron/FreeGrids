@@ -27,12 +27,27 @@ coordVec (x, y) =  V2 (fromIntegral x) (fromIntegral y)
 data Ranged a = Ranged { range :: Range a
                        , value :: a }
 
+data Slider = Slider { inner_range :: Range Int
+                     , size :: Int
+                     , percent :: Ranged Double
+                     }
+
+slider max per = Slider {inner_range = SpanRange (-max) (max)
+                        ,size = max
+                        ,percent = ranged (SpanRange (-100) 100) per}
+                            
+
 ranged :: Ord a => Range a -> a -> Ranged a
 ranged r v = if inRange r v then Ranged {range = r, value = v} else undefined
 
-type RCoord = (Ranged Int, Ranged Int)
-getRCoord (rx, ry) = (value rx, value ry)
+type RCoord = (Slider, Slider)
 
+getRCoord :: RCoord -> Vec2
+getRCoord (rx, ry) = let x = (((fromIntegral.size) rx) * ((value.percent) rx)) / 100 
+                         y = (((fromIntegral.size) ry) * ((value.percent) ry)) / 100
+                         in V2 x y
+
+cell_long :: Num a => a
 cell_long = 40 
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
@@ -80,8 +95,8 @@ makeLenses ''CharaEnty
 makeLenses ''CellObj
 makeLenses ''FieldMap
 
-fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) False True
-                                   ,CellObj (Cell(2,2)) False True
+fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) (slider cell_long 0,slider cell_long 0) False True
+                                   ,CellObj (Cell(2,2)) (slider cell_long 0,slider cell_long 0) False True
                                    ] []
 
 allDirection :: [Direct]
@@ -93,7 +108,7 @@ main :: IO (Maybe a)
 main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
     font <- embedIO $ loadFont "VL-Gothic-Regular.ttf"
     let ?font = font
-    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) (ranged SpanRange 0, ranged 0) False True
+    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) (slider cell_long 0,slider cell_long 0) False True
     mainLoop scell
 
 mainLoop :: (?font :: Font) => CharaEnty -> Game a
@@ -169,6 +184,8 @@ ownCell origin whole_rect cell_long io_me io_field = do
 
     embedIO $ writeIORef io_me $ CharaEnty mhp mdir' $ CellObj ncell (mobj^.pos) (mobj^.block) (mobj^.movable) 
     color yellow $ fillCells origin cell_long obj_cells
+    translate  (picPos origin cell_long (mobj^.cell) (mobj^.pos))
+        $ bitmap _front0_png
     fillCell origin cell_long ncell
     color blue $ tCell origin cell_long ncell mdir' $ circle 5
 
@@ -249,7 +266,7 @@ cornerPoint origin long edge c = let cpoint :: Cell -> Vec2
                                      in cpoint $ celledge c edge
 
 picPos :: Vec2 -> Double -> Cell -> RCoord -> Vec2
-picPos o l c rc = cornerPoint o l UpperLeft c + o + ((coordVec . getRCoord) rc)
+picPos o l c rc = cornerPoint o l UpperLeft c + o + ((getRCoord) rc)
 
 -- transPic :: Picture2D p => Vec2 -> p a -> Cell -> RCoord -> RCoord ->  p ()
 -- transPic origin p c rx ry = translate $ picPos origin c rx ry >> p
