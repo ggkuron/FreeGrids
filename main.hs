@@ -10,8 +10,9 @@ import qualified Data.Array as Array
 import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe)
 import Data.IORef
 import qualified Data.List as List
-
+import qualified Data.Range.Range as Range
 import Paths_Grids
+
 
 defaultWidth, defaultHeight :: Double
 defaultWidth = 640
@@ -20,8 +21,13 @@ defaultHeight = 480
 loadBitmapsWith [e|getDataFileName|] "images"
 
 type Coord = (Int,Int)
+type RCoord = Range.Range Double
 
--- bmp = readBitmap "img/front0.png"
+cellRelX, cellRelY :: RCoord
+cellRelX = Range.SpanRange (-cell_long) cell_long
+cellRelY = cellRelX
+cell_long = 40 
+
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
 instance Num(Cell) where 
@@ -48,7 +54,6 @@ data CharaEnty = CharaEnty {
 
 
 data CellObj = CellObj {
-                  -- _pos :: Vec2,
                   _cell :: Cell ,
                   _movable :: Bool ,
                   _block :: Bool 
@@ -87,7 +92,6 @@ main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
 mainLoop :: (?font :: Font) => CharaEnty -> Game a
 mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl )) = do
     let origin = V2 0 0
-        cell_long = 40
         thick = 2
         whole_rect = (0,0,defaultWidth, defaultHeight)
 
@@ -96,34 +100,33 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl )) = do
 
     foreverFrame $ do 
         color blue
-            $ fillCell (V2 0 0) 40 $ Cell (5,5)
+            $ fillCell (V2 0 0) cell_long $ Cell (5,5)
         me <- embedIO $ readIORef io_me
         let c' = me ^. cellObj ^. cell
 
         (current@(CurrentMap _ os cs)) <- embedIO $ readIORef io_field
 
         translate (V2 50 50) $ bitmap _front0_png
-        -- translate (V2 100 100) $ text 20 "text"
-        --mapM_ id [
-        --    color green
-        --        $ translate (V2 40 400)
-        --        $ text ?font 40 $ show hp
-        --    ,
-        --    color red 
-        --        $ ownCell origin whole_rect cell_long io_me io_field
-        --    ,
-        --    color yellow 
-        --        $ thickness 3 
-        --        $ renderGrids whole_rect cell_long
-        --    ,
-        --    color black 
-        --        $ translate (V2 150 150) 
-        --        $ text ?font 30 $ show c'
-        --    ,
-        --    color black 
-        --        $ translate (V2 40 40) 
-        --        $ text ?font 40 "Free World"
-        --    ]
+        mapM_ id [
+            color green
+                $ translate (V2 40 400)
+                $ text ?font cell_long $ show hp
+            ,
+            color red 
+                $ ownCell origin whole_rect cell_long io_me io_field
+            ,
+            color yellow 
+                $ thickness 3 
+                $ renderGrids whole_rect cell_long
+            ,
+            color black 
+                $ translate (V2 150 150) 
+                $ text ?font 30 $ show c'
+            ,
+            color black 
+                $ translate (V2 40 40) 
+                $ text ?font 40 "Free World"
+            ]
 
 key_map :: Map.Map Key Direct
 key_map = Map.fromList _tbl
@@ -162,11 +165,11 @@ ownCell origin whole_rect cell_long io_me io_field = do
     fillCell origin cell_long ncell
     color blue $ tCell origin cell_long ncell mdir' $ circle 5
 
-
 sum_move :: Cell -> [Direct] -> [Direct] -> Cell
 sum_move c dirs filter_dir = let dirs' = dirs List.\\ filter_dir
                              in flip (foldr (flip adjacentCell)) dirs' c
 
+renderGrids :: Rect -> Double -> Frame ()
 renderGrids (x0, y0, w, h) interval = renderStripeH (x0,y0,w,h) interval 
                                       >> renderStripeV (x0,y0,w,h) interval
 
@@ -227,6 +230,7 @@ adjacentDirection ours theirs = listToMaybe $ filter (\d -> adjacentCell ours d 
 rectCell :: Vec2 -> Double -> Cell -> [Vec2]
 rectCell origin long c = map (\e -> cornerPoint origin long e c) allEdge
 
+edgeIn :: Affine p => Vec2 -> Double -> Cell -> p a -> p a
 edgeIn o l c = translate $ cornerPoint o l UpperLeft c
 
 renderCellOutline :: Picture2D p => Vec2 -> Double -> Direct -> Cell -> p ()
@@ -236,6 +240,12 @@ cornerPoint :: Vec2 -> Double -> Edge -> Cell -> Vec2
 cornerPoint origin long edge c = let cpoint :: Cell -> Vec2
                                      cpoint (Cell (r,c)) = origin + V2 (fromIntegral c * long) (fromIntegral r * long) 
                                      in cpoint $ celledge c edge
+
+picPos :: Vec2 -> Double -> Cell -> RCoord -> RCoord -> Vec2
+picPos o l c rx ry = cornerPoint o UpperLeft c + o
+
+-- transPic :: Picture2D p => Vec2 -> p a -> Cell -> RCoord -> RCoord ->  p ()
+transPic origin p c rx ry = translate $ picPos origin c rx ry >> p
 
 fillCell :: Picture2D p => Vec2 -> Double -> Cell -> p () 
 fillCell origin long c = polygon $ rectCell origin long c 
