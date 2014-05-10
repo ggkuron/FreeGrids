@@ -18,3 +18,4 @@ Executable grids
                , containers >= 0.5.0.0
                , lens >= 4.1.2
                , array >= 0.4.0.1
+               , range >= 0.1.0.0
