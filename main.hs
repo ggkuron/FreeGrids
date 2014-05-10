@@ -10,7 +10,7 @@ import qualified Data.Array as Array
 import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe)
 import Data.IORef
 import qualified Data.List as List
-import qualified Data.Range.Range as Range
+import Data.Range.Range 
 import Paths_Grids
 
 defaultWidth, defaultHeight :: Double
@@ -20,13 +20,20 @@ defaultHeight = 480
 loadBitmapsWith [e|getDataFileName|] "images"
 
 type Coord = (Int,Int)
-type RCoord = Range.Range Double
 
-cellRelX, cellRelY :: RCoord
-cellRelX = Range.SpanRange (-cell_long) cell_long
-cellRelY = cellRelX
+coordVec :: Coord -> Vec2
+coordVec (x, y) =  V2 (fromIntegral x) (fromIntegral y)
+
+data Ranged a = Ranged { range :: Range a
+                       , value :: a }
+
+ranged :: Ord a => Range a -> a -> Ranged a
+ranged r v = if inRange r v then Ranged {range = r, value = v} else undefined
+
+type RCoord = (Ranged Int, Ranged Int)
+getRCoord (rx, ry) = (value rx, value ry)
+
 cell_long = 40 
-
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
 instance Num(Cell) where 
@@ -54,6 +61,7 @@ data CharaEnty = CharaEnty {
 
 data CellObj = CellObj {
                   _cell :: Cell ,
+                  _pos :: RCoord,
                   _movable :: Bool ,
                   _block :: Bool 
 }
@@ -73,8 +81,8 @@ makeLenses ''CellObj
 makeLenses ''FieldMap
 
 fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) False True
-                                  ,CellObj (Cell(2,2)) False True
-                                  ] []
+                                   ,CellObj (Cell(2,2)) False True
+                                   ] []
 
 allDirection :: [Direct]
 allDirection = [UP, LEFT, DOWN, RIGHT]
@@ -85,11 +93,11 @@ main :: IO (Maybe a)
 main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
     font <- embedIO $ loadFont "VL-Gothic-Regular.ttf"
     let ?font = font
-    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) False True
+    let  scell = CharaEnty 100 RIGHT $ CellObj (Cell(3,3)) (ranged SpanRange 0, ranged 0) False True
     mainLoop scell
 
 mainLoop :: (?font :: Font) => CharaEnty -> Game a
-mainLoop charaEnty@(CharaEnty hp mdir (CellObj c mb bl )) = do
+mainLoop charaEnty@(CharaEnty hp mdir (CellObj c pos mb bl )) = do
     let origin = V2 0 0
         thick = 2
         whole_rect = (0,0,defaultWidth, defaultHeight)
@@ -159,7 +167,7 @@ ownCell origin whole_rect cell_long io_me io_field = do
     ainp <- keyPress KeyA
     when ainp $ fillCells origin cell_long $ peripheralCells (mobj^.cell) 1
 
-    embedIO $ writeIORef io_me $ CharaEnty mhp mdir' $ CellObj ncell (mobj^.block) (mobj^.movable) 
+    embedIO $ writeIORef io_me $ CharaEnty mhp mdir' $ CellObj ncell (mobj^.pos) (mobj^.block) (mobj^.movable) 
     color yellow $ fillCells origin cell_long obj_cells
     fillCell origin cell_long ncell
     color blue $ tCell origin cell_long ncell mdir' $ circle 5
@@ -240,8 +248,8 @@ cornerPoint origin long edge c = let cpoint :: Cell -> Vec2
                                      cpoint (Cell (r,c)) = origin + V2 (fromIntegral c * long) (fromIntegral r * long) 
                                      in cpoint $ celledge c edge
 
-picPos :: Vec2 -> Double -> Cell -> RCoord -> RCoord -> Vec2
-picPos o l c rx ry = cornerPoint o l UpperLeft c + o
+picPos :: Vec2 -> Double -> Cell -> RCoord -> Vec2
+picPos o l c rc = cornerPoint o l UpperLeft c + o + ((coordVec . getRCoord) rc)
 
 -- transPic :: Picture2D p => Vec2 -> p a -> Cell -> RCoord -> RCoord ->  p ()
 -- transPic origin p c rx ry = translate $ picPos origin c rx ry >> p
