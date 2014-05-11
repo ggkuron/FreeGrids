@@ -27,13 +27,35 @@ coordVec (x, y) =  V2 (fromIntegral x) (fromIntegral y)
 data Ranged a = Ranged { range :: Range a
                        , value :: a }
 
+--data RangedCell = RangedCell { rangedCell_range :: Range Cell
+--                             , rangedCell_cell :: Cell
+--                             }
+--
+--
+--
+newtype Size2 = Size2 (Int,Int) deriving (Eq,Show,Ord)
+
+data RangedCell = RangedCell { 
+                               size :: Size2
+                             , r_cell  :: Cell
+                             } deriving(Eq,Show,Ord)
+
+
+maxbound rc = last $ fromRanges [rc]
+
+instance Enum(RangedCell) where
+    succ rc | c == mc =  RangedCell siz (cel + Cell(1,0))
+                                | otherwise = RangedCell siz (cel + Cell(0,1))
+      where siz@(Size2 (mr, mc)) = size rc
+            cel@(Cell(r, c)) = r_cell rc
+
 data Slider = Slider { inner_range :: Range Int
-                     , size :: Int
+                     , slider_size :: Int
                      , percent :: Ranged Double
                      }
 
 slider max per = Slider {inner_range = SpanRange (-max) (max)
-                        ,size = max
+                        ,slider_size = max
                         ,percent = ranged (SpanRange (-100) 100) per}
                             
 
@@ -43,8 +65,8 @@ ranged r v = if inRange r v then Ranged {range = r, value = v} else undefined
 type RCoord = (Slider, Slider)
 
 getRCoord :: RCoord -> Vec2
-getRCoord (rx, ry) = let x = (((fromIntegral.size) rx) * ((value.percent) rx)) / 100 
-                         y = (((fromIntegral.size) ry) * ((value.percent) ry)) / 100
+getRCoord (rx, ry) = let x = (((fromIntegral.slider_size) rx) * ((value.percent) rx)) / 100 
+                         y = (((fromIntegral.slider_size) ry) * ((value.percent) ry)) / 100
                          in V2 x y
 
 cell_long :: Num a => a
@@ -81,10 +103,14 @@ data CellObj = CellObj {
                   _block :: Bool 
 }
 
+type CellRange  = (Cell, Cell)
+
 data FieldMap = CurrentMap {
                   _mpos :: Cell ,
+                  _msizie :: CellRange,
                   _mobj :: [CellObj] ,
-                  _mchr :: [CharaEnty]
+                  _mchr :: [CharaEnty],
+                  _backpict :: Map.Map CellRange Bitmap
 }
 
 type Field = Array.Array Cell [FState]
@@ -95,13 +121,18 @@ makeLenses ''CharaEnty
 makeLenses ''CellObj
 makeLenses ''FieldMap
 
-fieldMap = CurrentMap (Cell (5,5)) [CellObj (Cell(1,1)) (slider cell_long 0,slider cell_long 0) False True
-                                   ,CellObj (Cell(2,2)) (slider cell_long 0,slider cell_long 0) False True
-                                   ] []
+type BackPicture = Map.Map (Range Cell) Bitmap
+
+
+fieldMap :: FieldMap
+fieldMap =  CurrentMap (Cell (5,5)) (Cell(0,0),Cell(25,25)) [CellObj (Cell(1,1)) (slider cell_long 0,slider cell_long 0) False True
+                                                            ,CellObj (Cell(2,2))  (slider cell_long 0,slider cell_long 0) False True
+                                                            ] [] (Map.fromList [((Cell(0,0),Cell(10,10)), _maptips_ami_png)])
 
 allDirection :: [Direct]
 allDirection = [UP, LEFT, DOWN, RIGHT]
 
+origin :: Vec2
 origin = V2 0 0 
 
 main :: IO (Maybe a)
@@ -118,7 +149,7 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj c pos mb bl )) = do
         whole_rect = (0,0,defaultWidth, defaultHeight)
 
     io_me    <- embedIO $ newIORef charaEnty
-    io_field <- embedIO $ newIORef fieldMap
+    io_field <- embedIO $ newIORef fieldMap 
 
     foreverFrame $ do 
         color blue
@@ -126,10 +157,12 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj c pos mb bl )) = do
         me <- embedIO $ readIORef io_me
         let c' = me ^. cellObj ^. cell
 
-        (current@(CurrentMap _ os cs)) <- embedIO $ readIORef io_field
+        (current@(CurrentMap _ msize os cs bp)) <- embedIO $ readIORef io_field
 
         translate (V2 50 50) $ bitmap _front0_png
         mapM_ id [
+            -- forM_ (Map.keys (fieldMap ^. backpict)) 
+            --       (\cr -> forM_ (fromJust.Map.lookup cr) bitmap)
             color green
                 $ translate (V2 40 400)
                 $ text ?font cell_long $ show hp
@@ -169,7 +202,7 @@ ownCell origin whole_rect cell_long io_me io_field = do
     let mhp = me ^. hp
         mdir = me ^. direct
         mobj = me ^. cellObj
-    (CurrentMap mcell fobj_ary fchars) <- embedIO $ readIORef io_field
+    (CurrentMap mcell msize fobj_ary fchars bp) <- embedIO $ readIORef io_field
 
     current_inp <- filterM keyDown $ Map.keys key_map 
     let inp_directs :: [Direct]
