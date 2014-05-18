@@ -1,5 +1,12 @@
 {-# LANGUAGE ImplicitParams, OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+-- {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 
 module Main where
 import FreeGame
@@ -17,41 +24,77 @@ defaultWidth, defaultHeight :: Double
 defaultWidth = 640
 defaultHeight = 480
 
-loadBitmapsWith [e|getDataFileName|] "images"
+loadBitmapsWith [|getDataFileName|] "images"
 
 type Coord = (Int,Int)
 
 coordVec :: Coord -> Vec2
 coordVec (x, y) =  V2 (fromIntegral x) (fromIntegral y)
 
-data Ranged a = Ranged { range :: Range a
-                       , value :: a }
+-- data Ranged a = Ranged { range :: Range a
+--                        , value :: a }
 
---data RangedCell = RangedCell { rangedCell_range :: Range Cell
---                             , rangedCell_cell :: Cell
---                             }
---
---
---
-newtype Size2 = Size2 (Int,Int) deriving (Eq,Show,Ord)
+class Ranged a b where
+    range :: a -> Range b
+    value :: a -> b
 
-data RangedCell = RangedCell { 
-                               size :: Size2
-                             , r_cell  :: Cell
+data RangedValue a = RangedValue { rangev :: Range a
+                                 , valuev :: a }
+
+instance Ranged (RangedValue a) a where
+    range :: RangedValue a -> Range a
+    range = rangev
+    value :: RangedValue a -> a
+    value = valuev
+
+-- class (Nat x) where
+--     fromNat :: Nat x => x -> Int
+-- 
+-- data Zero = Zero
+-- data Succ x = Succ x
+-- 
+-- instance Nat Zero where
+--     fromNat x = 0 
+-- 
+-- instance Nat x => Nat (Succ x) where
+--     fromNat (Succ x) = 1 + fromNat x
+-- 
+-- 
+type Size2 = (Int,Int) 
+
+-- data Ranged' x y a where
+--      Ranged' :: (Nat x, Nat y) => x -> y ->  a ->  Ranged' x y a
+
+
+data RangedCell25x25 = RangedCell25x25 { 
+                              rcell  :: Cell
                              } deriving(Eq,Show,Ord)
 
 
-maxbound rc = last $ fromRanges [rc]
+instance Ranged RangedCell25x25 Cell where
+    range rc = SpanRange (Cell(0,0)) (Cell(25,25))
+    value = rcell
 
-instance Enum(RangedCell) where
-    succ rc | c == mc =  RangedCell siz (cel + Cell(1,0))
-                                | otherwise = RangedCell siz (cel + Cell(0,1))
-      where siz@(Size2 (mr, mc)) = size rc
-            cel@(Cell(r, c)) = r_cell rc
+-- testrange = [(RangedCell (25,25) (Cell(0,0))) .. (RangedCell (25,25) (Cell(10,10)))]
+
+
+-- maxbound rc = last $ fromRanges [rc]
+
+instance Enum(RangedCell25x25) where
+    succ (RangedCell25x25 cell@(Cell (r, c))) | mcell <= cell = error "over sized"
+                                  | 25 == c = RangedCell25x25  (cell + Cell (1,0))
+                                  | otherwise = RangedCell25x25 (cell + Cell (0,1))
+      where mcell = Cell(25,25)
+    -- Ranged' r c (cel + Cell(1,0))
+      --                   | otherwise = RangedCell siz (cel + Cell(0,1))
+    fromEnum  (RangedCell25x25 (Cell cell@(r, c))) = r * 25 + c
+      where mcell = Cell(25,25)
+    toEnum i = RangedCell25x25 $ Cell (divMod i 25)
+      where mcell = Cell(25,25)
 
 data Slider = Slider { inner_range :: Range Int
                      , slider_size :: Int
-                     , percent :: Ranged Double
+                     , percent :: RangedValue Double
                      }
 
 slider max per = Slider {inner_range = SpanRange (-max) (max)
@@ -59,8 +102,8 @@ slider max per = Slider {inner_range = SpanRange (-max) (max)
                         ,percent = ranged (SpanRange (-100) 100) per}
                             
 
-ranged :: Ord a => Range a -> a -> Ranged a
-ranged r v = if inRange r v then Ranged {range = r, value = v} else undefined
+ranged :: Ord a => Range a -> a -> RangedValue a 
+ranged r v = if inRange r v then RangedValue {rangev = r, valuev = v} else undefined
 
 type RCoord = (Slider, Slider)
 
@@ -68,7 +111,6 @@ getRCoord :: RCoord -> Vec2
 getRCoord (rx, ry) = let x = (((fromIntegral.slider_size) rx) * ((value.percent) rx)) / 100 
                          y = (((fromIntegral.slider_size) ry) * ((value.percent) ry)) / 100
                          in V2 x y
-
 cell_long :: Num a => a
 cell_long = 40 
 
@@ -103,14 +145,15 @@ data CellObj = CellObj {
                   _block :: Bool 
 }
 
-type CellRange  = (Cell, Cell)
+-- type CellRange  = (RangedCell, RangedCell)
+
 
 data FieldMap = CurrentMap {
                   _mpos :: Cell ,
-                  _msizie :: CellRange,
+                  _msizie :: Size2,
                   _mobj :: [CellObj] ,
                   _mchr :: [CharaEnty],
-                  _backpict :: Map.Map CellRange Bitmap
+                  _backpict :: Map.Map (RangedCell25x25,RangedCell25x25) Bitmap
 }
 
 type Field = Array.Array Cell [FState]
@@ -125,15 +168,20 @@ type BackPicture = Map.Map (Range Cell) Bitmap
 
 
 fieldMap :: FieldMap
-fieldMap =  CurrentMap (Cell (5,5)) (Cell(0,0),Cell(25,25)) [CellObj (Cell(1,1)) (slider cell_long 0,slider cell_long 0) False True
+fieldMap =  CurrentMap (Cell (5,5)) msize [CellObj (Cell(1,1)) (slider cell_long 0,slider cell_long 0) False True
                                                             ,CellObj (Cell(2,2))  (slider cell_long 0,slider cell_long 0) False True
-                                                            ] [] (Map.fromList [((Cell(0,0),Cell(10,10)), _maptips_ami_png)])
+                                                            ] [] (Map.fromList [( (RangedCell25x25  (Cell(0,0)), RangedCell25x25 (Cell(10,10))),
+                                                                                  _maptips_ami_png)])
+                                                            where msize = (25,25)
 
 allDirection :: [Direct]
 allDirection = [UP, LEFT, DOWN, RIGHT]
 
 origin :: Vec2
 origin = V2 0 0 
+
+center :: RCoord
+center = (slider cell_long 0,slider cell_long 0)
 
 main :: IO (Maybe a)
 main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
@@ -157,12 +205,17 @@ mainLoop charaEnty@(CharaEnty hp mdir (CellObj c pos mb bl )) = do
         me <- embedIO $ readIORef io_me
         let c' = me ^. cellObj ^. cell
 
-        (current@(CurrentMap _ msize os cs bp)) <- embedIO $ readIORef io_field
+        (current@(CurrentMap _ (mr,mc) os cs bp)) <- embedIO $ readIORef io_field
 
         translate (V2 50 50) $ bitmap _front0_png
+
+        let cix = zipWith (curry Cell) [0 .. mr] [0 .. mc] :: [Cell]
+
+        forM_ (Map.keys (fieldMap ^. backpict)) 
+              (\crange -> let b = fromJust (Map.lookup crange (fieldMap^.backpict)) :: Bitmap
+                           in forM [(fst crange).. (snd crange)] (\rc -> translate (picPos origin cell_long (rcell rc) center)  (bitmap b)))
+
         mapM_ id [
-            -- forM_ (Map.keys (fieldMap ^. backpict)) 
-            --       (\cr -> forM_ (fromJust.Map.lookup cr) bitmap)
             color green
                 $ translate (V2 40 400)
                 $ text ?font cell_long $ show hp
