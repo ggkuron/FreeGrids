@@ -131,7 +131,6 @@ class Size a where
 data SizeX = Size25x25
 
 -- CellはEnumのインスタンスにはなれない。toEnumが定義不能。
--- のでRanged Cellは存在できない。
 -- (RangedValue (SizedCell a))がRangedのインスタンス
 
 instance Size SizeX where
@@ -140,8 +139,6 @@ instance Size SizeX where
 newtype SizedCell25x25 = SizedCell25x25 Cell
                           deriving(Eq,Show,Ord)
 
--- data SizedCell where
---     SizedCell :: SizeX -> SizedCell
 
 class SizedCell a where
     cellValue :: a -> Cell
@@ -252,8 +249,6 @@ data ActionCommand = Nuetral | Walk Direct | Stop deriving (Eq, Show, Ord)
 
 data CharaAction = Stopping | Walking Direct deriving (Eq, Show, Ord)
 
--- data FState = FNormal | FBlock deriving (Eq,Ord)
-
 data CharaEnty = CharaEnty 
                { _cellEnty :: CellEnty
                , _fourside :: Map.Map Direct [Bitmap]
@@ -346,9 +341,6 @@ data FieldMap = FieldMap
               , _backpict :: Map.Map (SizedCell25x25,SizedCell25x25) Bitmap
               , _mapsize :: SizeX
               }
-
--- type Field = Array.Array Cell [FState]
--- filedMap' = Map.fromList [(Cell (5,5),FBlock)]
 
 makeLenses ''CellEnty
 makeLenses ''CellState
@@ -500,9 +492,6 @@ renderCellOutline origin long dir c = line $ map (\edge -> cornerPoint origin lo
 
 picPos :: Vec2 -> Double -> Cell -> RCoord -> Vec2
 picPos o l c rc = cornerPoint o l UpperLeft c + getRCoord rc
-
--- transPic :: Picture2D p => Vec2 -> p a -> Cell -> RCoord -> RCoord ->  p ()
--- transPic origin p c rx ry = translate $ picPos origin c rx ry >> p
 
 fillCell :: Picture2D p => Vec2 -> Double -> Cell -> p () 
 fillCell origin long c = polygon $ rectCell origin long c 
