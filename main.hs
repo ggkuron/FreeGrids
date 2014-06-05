@@ -15,7 +15,7 @@ import qualified Data.Map as Map
 import qualified Data.Array as Array
 import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe, maybeToList)
 import Data.IORef
-import qualified Data.List as List
+import Data.List ((\\))
 import Data.Range.Range 
 import Paths_Grids
 import Language.Haskell.TH hiding(Range)
@@ -52,7 +52,7 @@ allEdge = [UpperLeft,LowerLeft,LowerRight,UpperRight]
 cornerPoint :: Vec2 -> Double -> Edge -> Cell -> Vec2
 cornerPoint origin long edge c = let cpoint :: Cell -> Vec2
                                      cpoint (Cell (r,c)) = origin + V2 (fromIntegral c * long) (fromIntegral r * long) 
-                                     in cpoint $ celledge c edge
+                                 in cpoint $ celledge c edge
 
 rectCell :: Vec2 -> Double -> Cell -> [Vec2]
 rectCell origin long c = map (\e -> cornerPoint origin long e c) allEdge
@@ -73,11 +73,11 @@ fromDirect DOWN  RIGHT = LowerRight
 fromDirect UP    RIGHT = UpperRight
 fromDirect RIGHT UP    = UpperRight
 
-directLine :: Direct -> [Edge]
-directLine UP    = [UpperRight, UpperLeft]
-directLine LEFT  = [UpperLeft , LowerLeft]
-directLine DOWN  = [LowerLeft , LowerRight]
-directLine RIGHT = [LowerRight, UpperRight]
+directLineEdge :: Direct -> [Edge]
+directLineEdge UP    = [UpperRight, UpperLeft]
+directLineEdge LEFT  = [UpperLeft , LowerLeft]
+directLineEdge DOWN  = [LowerLeft , LowerRight]
+directLineEdge RIGHT = [LowerRight, UpperRight]
 
 adjacentCell :: Cell -> Direct -> Cell
 adjacentCell (Cell (r,c)) UP    = Cell (r-1,c)
@@ -95,7 +95,7 @@ adjacentDirection :: Cell -> Cell -> Maybe Direct
 adjacentDirection ours theirs = listToMaybe $ filter (\d -> adjacentCell ours d == theirs) allDirection 
 
 sum_move :: Cell -> [Direct] -> [Direct] -> Cell
-sum_move c dirs filter_dir = let dirs' = dirs List.\\ filter_dir
+sum_move c dirs filter_dir = let dirs' = dirs \\ filter_dir
                              in flip (foldr (flip adjacentCell)) dirs' c
 
 
@@ -103,7 +103,7 @@ sum_move c dirs filter_dir = let dirs' = dirs List.\\ filter_dir
 -- b : 範囲中での返値の型
 class Ranged a b where
     range :: a -> Range b -- (type a) holding Range (:type  b orelse type a)
-    rangedValue :: a -> b -- retrieve ranged inner value (type b) from (type a)
+    rangedValue :: a -> b -- retrieve ranged value (type b) from (type a)
 
 data RangedValue a = RangedValue 
                    { _rangeSize :: Range a
@@ -113,8 +113,8 @@ data RangedValue a = RangedValue
 makeLenses ''RangedValue
 
 ranged :: Ord a => Range a -> a -> RangedValue a 
-ranged r v = if inRange r v then RangedValue {_rangeSize = r, _rangeInsideValue = v} 
-                            else error "you tried to init with out of ranged value"
+ranged r v | inRange r v = RangedValue {_rangeSize = r, _rangeInsideValue = v} 
+           | otherwise = error $ "範囲外だよね"
 
 instance Ranged (RangedValue a) a where
     range :: RangedValue a -> Range a
@@ -139,7 +139,6 @@ instance Size SizeX where
 newtype SizedCell25x25 = SizedCell25x25 Cell
                           deriving(Eq,Show,Ord)
 
-
 class SizedCell a where
     cellValue :: a -> Cell
     cellSize :: a -> SizeTuple
@@ -162,7 +161,7 @@ instance Enum(SizedCell25x25) where
                                   | otherwise = SizedCell25x25 (cell + Cell (0,1))
       where msize@(mr,mc) = cellSize rc
             mcell = Cell(msize)
-    fromEnum rc@(SizedCell25x25 (Cell cell@(r, c))) = r * mc + c
+    fromEnum rc@(SizedCell25x25 (Cell (r, c))) = r * mc + c
       where (_, mc) = cellSize rc
     toEnum i = SizedCell25x25 $ Cell (divMod i 25)
 
@@ -230,22 +229,21 @@ nextDirect (rcx, rcy) = ((rcx', rcy'), xdir ++ ydir)
     where
         maybeToListTuple (rc, dr) = (rc, maybeToList dr)
         (rcx', xdir) = maybeToListTuple $
-                         if isMaxUp rcx then
-                          (slideNegative, Just RIGHT)
-                         else if isMaxDown rcx then
-                          (slidePositive, Just LEFT)
-                         else (rcx, Nothing)
+                         case rcx of 
+                           x | isMaxUp x -> (slideNegative, Just RIGHT)
+                             | isMaxDown x -> (slidePositive, Just LEFT)
+                             | otherwise -> (rcx, Nothing)
         (rcy', ydir) = maybeToListTuple $
-                         if isMaxUp rcy then
-                            (slideNegative, Just DOWN)
-                         else if isMaxDown rcy then
-                            (slidePositive, Just UP)
-                         else (rcy, Nothing)
+                         case rcy of 
+                           y | isMaxUp y -> (slideNegative, Just DOWN)
+                             | isMaxDown y -> (slidePositive, Just UP)
+                             | otherwise -> (rcy, Nothing)
+
 
 cell_long :: Num a => a
 cell_long = 40 
 
-data ActionCommand = Nuetral | Walk Direct | Stop deriving (Eq, Show, Ord)
+data ActionCommand = Nuetral | Walk Direct | Stop Direct deriving (Eq, Show, Ord)
 
 data CharaAction = Stopping | Walking Direct deriving (Eq, Show, Ord)
 
@@ -258,17 +256,17 @@ data CharaState = CharaState
                 { _hp :: Int
                 , _direct :: Direct
                 , _charaAction :: CharaAction
-                ,  _cellState :: CellState
+                , _cellState :: CellState
 }
 
 type Chara = (CharaEnty, IORef CharaState)
 
 me_enty :: CharaEnty
 me_enty =  CharaEnty (CellEnty True True ) 
-                     (Map.fromList [(UP,[_back0_png,_back1_png,_back2_png,_back3_png,_back4_png]),
-                                   (DOWN,[_front0_png,_front1_png,_front2_png,_front3_png,_front4_png]),
-                                   (LEFT,[_left0_png,_left1_png,_left2_png,_left3_png,_left4_png]),
-                                   (RIGHT,[_right0_png,_right1_png,_right2_png,_right3_png,_right4_png])])
+                     (Map.fromList [(UP   , [_back0_png,_back1_png,_back2_png,_back3_png,_back4_png]),
+                                    (DOWN , [_front0_png,_front1_png,_front2_png,_front3_png,_front4_png]),
+                                    (LEFT , [_left0_png,_left1_png,_left2_png,_left3_png,_left4_png]),
+                                    (RIGHT, [_right0_png,_right1_png,_right2_png,_right3_png,_right4_png])])
 me_state :: CharaState
 me_state = CharaState 100 DOWN Stopping (CellState (Cell(5,5)) center 0) 
 
@@ -285,43 +283,6 @@ type CharaObj = (CharaEnty,CharaState)
 
 frameLoop = 1500
 
-instance FieldObj CharaObj where
-    clip ((CharaEnty (CellEnty _ _) fside),
-         (CharaState chp cdir action (CellState cell pos elapsed) )) 
-         = case action of
-               Stopping -> (fromJust ( Map.lookup cdir fside)) !! 0
-               Walking dir -> fromJust (Map.lookup dir fside) !! (index elapsed) 
-               where
-                   index et | et < 8 = 1
-                            | et < 16 = 2
-                            | et < 24 = 3
-                            | et < 32 = 4
-                            | otherwise = 4
-    actOn (charaEnty, CharaState chp cdir action (CellState cell pos elapsed)) 
-          Nuetral 
-          = (charaEnty, CharaState chp cdir action (CellState cell pos elapsed')) 
-          where elapsed' = if elapsed > frameLoop then 0 else elapsed + 1
-    actOn (charaEnty, CharaState chp cdir action (CellState cell pos elapsed)) 
-          (Walk cmd_dir)
-          = case action of
-             Stopping -> (charaEnty
-                     , CharaState chp cmd_dir (Walking cmd_dir) (CellState cell pos (elapsed+1))) 
-             Walking current_dir ->
-                 if current_dir == cmd_dir 
-                     then (charaEnty , state') 
-                     else (charaEnty
-                          , CharaState chp cdir Stopping (CellState cell pos 0))
-                where
-                    elapsed' | elapsed > 32 = 0
-                             | otherwise = elapsed+1
-                    pos' = slideRCoord pos current_dir
-                    (pos'', dirs') = nextDirect pos'
-                    cell' = sum_move cell dirs' [] :: Cell
-                    state' = CharaState chp current_dir (Walking current_dir ) $
-                                   CellState cell' pos'' elapsed'                  
-    actOn (charaEnty, CharaState chp cdir action (CellState cell pos elapsed) ) 
-          Stop
-          = (charaEnty, CharaState chp cdir Stopping (CellState cell pos 0) ) 
 
 data CellEnty = CellEnty 
               { _movable :: Bool 
@@ -348,14 +309,52 @@ makeLenses ''CharaEnty
 makeLenses ''CharaState
 makeLenses ''FieldMap
 
+instance FieldObj CharaObj where
+    clip ((CharaEnty (CellEnty _ _) fside),
+         (CharaState chp cdir action (CellState cell pos elapsed) )) 
+         = case action of
+               Stopping -> (fromJust ( Map.lookup cdir fside)) !! 0
+               Walking dir -> fromJust (Map.lookup dir fside) !! (index elapsed) 
+               where
+                   index et | et < 8 = 1
+                            | et < 16 = 2
+                            | et < 24 = 3
+                            | et < 32 = 4
+                            | otherwise = 4
+    actOn (charaEnty, charaState) Nuetral 
+          = (charaEnty, charaState&cellState.elapsedFrames.~elapsed') 
+          where
+              elapsed = charaState^.cellState^.elapsedFrames
+              elapsed' = if  elapsed > frameLoop then 0 else elapsed + 1
+    actOn (charaEnty, CharaState chp cdir action (CellState cell pos elapsed)) 
+          (Walk cmd_dir)
+          = case action of
+             Stopping -> (charaEnty
+                         , CharaState chp cmd_dir (Walking cmd_dir) (CellState cell pos (elapsed+1))) 
+             Walking current_dir 
+                 | current_dir == cmd_dir -> (charaEnty , state') 
+                 | otherwise ->  (charaEnty , CharaState chp cdir Stopping (CellState cell pos 0))
+                where elapsed' = if elapsed > 32 then 0 else elapsed + 1
+                      pos' = slideRCoord pos current_dir
+                      (pos'', dirs') = nextDirect pos'
+                      cell' = sum_move cell dirs' [] :: Cell
+                      state' = CharaState chp current_dir (Walking current_dir ) $
+                                               CellState cell' pos'' elapsed'                  
+
+    actOn (charaEnty, charaState) (Stop dir)
+                = (charaEnty, stoppedState) 
+                    where stoppedState = charaState&cellState.elapsedFrames.~0&direct.~dir
+
+
 fieldMap :: FieldMap
 fieldMap =  FieldMap (Cell (5,5)) [(CellEnty True True, (CellState (Cell(1,1)) center 0))
                                   ,(CellEnty True True, (CellState (Cell(2,2)) center 0))
-                                  ] [] (Map.fromList [( (SizedCell25x25  (Cell(0,0)), SizedCell25x25 (Cell(0,10))),
-                                                        _maptips_ami_png),
-                                                      ( (SizedCell25x25  (Cell(5,0)), SizedCell25x25 (Cell(25,25))),
-                                                        _maptips_grass_png)])
-                                   (Size25x25)
+                                  ] [] (Map.fromList [((SizedCell25x25  (Cell(0,0)) ,SizedCell25x25 (Cell(0,10)))
+                                                       , _maptips_ami_png),
+                                                      ((SizedCell25x25  (Cell(5,0)) ,SizedCell25x25 (Cell(25,25)))
+                                                       , _maptips_grass_png)
+                                                     ]
+                                        ) (Size25x25)
 
 
 origin :: Vec2
@@ -367,15 +366,13 @@ main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
     let ?font = font
     mainLoop me_enty me_state
 
-mainLoop :: (?font :: Font) => CharaEnty -> CharaState ->  Game a
+mainLoop :: (?font :: Font) => CharaEnty -> CharaState -> Game a
 mainLoop me_enty me_state = do
     let origin = V2 0 0
         thick = 2
         whole_rect = (0,0,defaultWidth, defaultHeight)
 
     io_me_state <- embedIO $ newIORef me_state
-    -- TODO ImplicitParamで渡すとかなんとか
-    --      CellIdxのIteraterが必要な気が
     io_field <- embedIO $ newIORef fieldMap 
 
     foreverFrame $ do 
@@ -390,7 +387,10 @@ mainLoop me_enty me_state = do
 
         forM_ (Map.keys bp) 
               (\crange -> let b = fromJust (Map.lookup crange bp) :: Bitmap
-                          in forM [(fst crange).. (snd crange)] (\rc -> translate (picPos origin cell_long (cellValue rc) center)  (bitmap b)))
+                          in forM [(fst crange)..(snd crange)] 
+                                  (\rc -> let transVal = picPos origin cell_long (cellValue rc) center
+                                          in translate transVal (bitmap b)
+                                  ))
 
         mapM_ id [
             color red 
@@ -427,12 +427,12 @@ ownCell :: (?font :: Font) => Vec2 -> Rect -> Double ->
 ownCell origin whole_rect cell_long me me_state io_field = do
     (FieldMap mcell fobj_ary fchars bp msize) <- embedIO $ readIORef io_field
     me_chara_state <- embedIO $ readIORef me_state
-    let me_hp  = me_chara_state ^. hp
-        me_dir = me_chara_state ^. direct
-        me_action = me_chara_state ^. charaAction
-        me_cellstate = me_chara_state ^. cellState
-        me_cell = me_cellstate ^. cell
-        me_pos = me_cellstate ^. pos
+    let me_hp  = me_chara_state^.hp
+        me_dir = me_chara_state^.direct
+        me_action    = me_chara_state^.charaAction
+        me_cellstate = me_chara_state^.cellState
+        me_cell    = me_cellstate^.cell
+        me_pos     = me_cellstate^.pos
         me_elapsed = me_cellstate^.elapsedFrames
 
     current_inp <- filterM keyPress $ Map.keys key_map 
@@ -442,10 +442,9 @@ ownCell origin whole_rect cell_long me me_state io_field = do
         blocked_dir = adjacentDirections obj_cells me_cell
 
         cmd =  case inp_directs of 
-                   Nothing -> Stop
-                   Just dir -> if dir `elem` blocked_dir 
-                                   then Stop
-                                   else Walk dir
+                   Nothing -> Stop me_dir
+                   Just dir | dir `elem` blocked_dir -> Stop dir
+                            | otherwise -> Walk dir
 
         (me',me_state') = actOn (me, me_chara_state) cmd
         me_cellState' = me_state'^.cellState
@@ -461,7 +460,7 @@ ownCell origin whole_rect cell_long me me_state io_field = do
     translate  (picPos origin cell_long me_cell' me_pos')
         $ bitmap (clip (me', me_state'))
     translate (V2 240 150) $ text ?font 50 (show me_elapsed)
-    translate (V2 240 250) $ text ?font 50 (show me_dir)
+    translate (V2 240 250) $ text ?font 50 (show me_cell')
     -- fillCell origin cell_long ncell
     -- color blue $ tCell origin cell_long ncell me_dir' $ circle 5
 
@@ -488,7 +487,7 @@ renderStripeV' (x0, y0, w, h) interval = zipWithM_ (\x y -> line [x,y])
                      in  x + p * 0.3 
 
 renderCellOutline :: Picture2D p => Vec2 -> Double -> Direct -> Cell -> p ()
-renderCellOutline origin long dir c = line $ map (\edge -> cornerPoint origin long edge c)  $ directLine dir
+renderCellOutline origin long dir c = line $ map (\edge -> cornerPoint origin long edge c)  $ directLineEdge dir
 
 picPos :: Vec2 -> Double -> Cell -> RCoord -> Vec2
 picPos o l c rc = cornerPoint o l UpperLeft c + getRCoord rc
@@ -497,7 +496,7 @@ fillCell :: Picture2D p => Vec2 -> Double -> Cell -> p ()
 fillCell origin long c = polygon $ rectCell origin long c 
 
 tCell :: Affine p => Vec2 -> Double -> Cell -> Direct -> p a -> p a
-tCell origin long c dir = translate $ (/4) . sum $ rectCell origin long $ adjacentCell c dir
+tCell origin long c dir = translate $ (/4).sum $ rectCell origin long $ adjacentCell c dir
 
 strokeCell :: Picture2D p => Vec2 -> Double -> Cell -> p ()
 strokeCell origin long c = polygonOutline $ rectCell origin long c 
