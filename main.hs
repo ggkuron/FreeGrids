@@ -10,14 +10,14 @@ module Main where
 import FreeGame
 import Control.Monad 
 import Control.Lens 
+import Data.IORef
+import Data.Range.Range 
+import Data.List ((\\))
+import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe, maybeToList)
 import qualified Data.Map as Map
 import qualified Data.Array as Array
-import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe, maybeToList)
-import Data.IORef
-import Data.List ((\\))
-import Data.Range.Range 
-import Paths_Grids
 import Language.Haskell.TH hiding(Range)
+import Paths_Grids
 
 defaultWidth, defaultHeight :: (Num a) => a
 defaultWidth = 800
@@ -250,7 +250,7 @@ data CharaState = CharaState
                 , _direct :: Direct
                 , _charaAction :: CharaAction
                 , _cellState :: CellState
-}
+                }
 
 type Chara = (CharaEnty, IORef CharaState)
 
@@ -384,27 +384,27 @@ mainLoop me_enty me_state = do
         initial_mapIndex = Cell(5,5)
         currentMap = fromJust $ Map.lookup initial_mapIndex field
 
+    io_field    <- embedIO $ newIORef currentMap 
     io_me_state <- embedIO $ newIORef me_state
-    io_field <- embedIO $ newIORef currentMap 
     io_mapIndex <- embedIO $ newIORef initial_mapIndex
-    io_origin  <- embedIO $ newIORef initial_origin 
+    io_origin   <- embedIO $ newIORef initial_origin 
 
     foreverFrame $ do 
         color blue
             $ fillCell (V2 0 0) cell_long $ Cell (5,5)
 
         current_field <- embedIO $ readIORef io_field
-        mapIndex <- embedIO $ readIORef io_mapIndex
-        origin  <-  embedIO $ readIORef io_origin
+        mapIndex      <- embedIO $ readIORef io_mapIndex
+        origin        <-  embedIO $ readIORef io_origin
         mapM_ (\d -> let inx = adjacentCell mapIndex d
                      in  case Map.lookup inx field of
                          Nothing -> return ()
                          Just m -> drawBackPict origin (m^.backpict) $ transMap (size (m^.mapsize)) d
               ) allDirection
 
-        let cix = zipWith (curry Cell) [0 .. mr] [0 .. mc] :: [Cell]
+        let cix     = zipWith (curry Cell) [0 .. mr] [0 .. mc] :: [Cell]
             (mr,mc) = size $ current_field^.mapsize
-            bp = current_field^.backpict
+            bp      = current_field^.backpict
             me_cell = me_state^.cellState^.cell
 
         mapM_ id [
@@ -434,9 +434,9 @@ mainLoop me_enty me_state = do
         transMap :: SizeTuple -> Direct -> Vec2 -> Vec2
         transMap st dir = let V2 sx sy = coordVec st 
                           in case dir of
-                             UP -> _transMap sy dir
-                             DOWN -> _transMap sy dir
-                             LEFT -> _transMap sx dir
+                             UP    -> _transMap sy dir
+                             DOWN  -> _transMap sy dir
+                             LEFT  -> _transMap sx dir
                              RIGHT -> _transMap sx dir
 
 key_map :: Map.Map Key Direct
@@ -469,7 +469,7 @@ ownCell io_origin whole_rect cell_long me me_state io_field = do
     current_inp <- filterM keyPress $ Map.keys key_map 
     let inp_directs :: Maybe Direct
         inp_directs = listToMaybe $ map (\k -> fromJust $ Map.lookup k key_map) current_inp
-        obj_cells = map ((^.cell).snd) fobj_ary
+        obj_cells   = map ((^.cell).snd) fobj_ary
         blocked_dir = adjacentDirections obj_cells me_cell
 
         cmd =  case inp_directs of 
@@ -478,10 +478,10 @@ ownCell io_origin whole_rect cell_long me me_state io_field = do
                             | otherwise -> Walk dir
 
         (me',me_state') = actOn (me, me_chara_state) cmd
-        me_cellState' = me_state'^.cellState
-        me_pos' = me_cellState'^.pos
-        me_cell' = me_cellState'^.cell
-        me_abpos = picPos origin cell_long me_cell' me_pos'
+        me_cellState'   = me_state'^.cellState
+        me_pos'         = me_cellState'^.pos
+        me_cell'        = me_cellState'^.cell
+        me_abpos        = picPos origin cell_long me_cell' me_pos'
         origin' :: Vec2
         origin' =  (case me_abpos of 
              V2 px py | px <= (defaultWidth/3)    -> (+) $ V2 4 0 
@@ -544,11 +544,10 @@ fillCells :: (Monad p, Picture2D p) => Vec2 -> Double -> [Cell] -> p ()
 fillCells origin long cs = mapM_ (fillCell origin long) cs 
 
 strokeCells :: (Monad p, Picture2D p) => Vec2 -> Double -> [Cell] -> p ()
-strokeCells origin long cs =
-    let renderCellOutline' = renderCellOutline origin long
-        render c = let  adjacents = adjacentDirections cs c
-                    in mapM_ (\d -> renderCellOutline' d c) adjacents
-     in mapM_ render cs
+strokeCells origin long cs = mapM_ render cs
+     where renderCellOutline' = renderCellOutline origin long
+           adjacents c = adjacentDirections cs c
+           render c =  mapM_ (\d -> renderCellOutline' d c) (adjacents c)
 
 adjacentDirections :: Board -> Cell -> [Direct]
 adjacentDirections board c = catMaybes $ map (adjacentDirection c) board
