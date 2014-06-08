@@ -2,7 +2,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
--- {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -20,9 +19,9 @@ import Data.Range.Range
 import Paths_Grids
 import Language.Haskell.TH hiding(Range)
 
-defaultWidth, defaultHeight :: Double
-defaultWidth = 640
-defaultHeight = 480
+defaultWidth, defaultHeight :: (Num a) => a
+defaultWidth = 800
+defaultHeight = 600
 
 loadBitmapsWith [|getDataFileName|] "images"
 
@@ -98,9 +97,6 @@ sum_move :: Cell -> [Direct] -> [Direct] -> Cell
 sum_move c dirs filter_dir = let dirs' = dirs \\ filter_dir
                              in flip (foldr (flip adjacentCell)) dirs' c
 
-
--- a : 範囲ホルダーとなれる型
--- b : 範囲中での返値の型
 class Ranged a b where
     range :: a -> Range b -- (type a) holding Range (:type  b orelse type a)
     rangedValue :: a -> b -- retrieve ranged value (type b) from (type a)
@@ -130,9 +126,6 @@ class Size a where
 
 data SizeX = Size25x25
 
--- CellはEnumのインスタンスにはなれない。toEnumが定義不能。
--- (RangedValue (SizedCell a))がRangedのインスタンス
-
 instance Size SizeX where
     size Size25x25 = $([| (25,25) |])
 
@@ -157,13 +150,13 @@ instance Ranged SizedCell25x25 Cell where
 instance Enum(SizedCell25x25) where
     succ rc@(SizedCell25x25 cell@(Cell (r, c))) 
                                   | mcell <= cell = error "over sized"
-                                  | mc == c = SizedCell25x25  (cell + Cell (1,0))
-                                  | otherwise = SizedCell25x25 (cell + Cell (0,1))
+                                  | mc == c = SizedCell25x25  $ cell + Cell (1,0)
+                                  | otherwise = SizedCell25x25 $ cell + Cell (0,1)
       where msize@(mr,mc) = cellSize rc
             mcell = Cell(msize)
     fromEnum rc@(SizedCell25x25 (Cell (r, c))) = r * mc + c
       where (_, mc) = cellSize rc
-    toEnum i = SizedCell25x25 $ Cell (divMod i 25)
+    toEnum i = SizedCell25x25 $Cell (divMod i 25)
 
 data Slider = Slider 
             { _inner_range :: Range Int
@@ -189,24 +182,24 @@ slideDown i sl | per <= -100 = sl&percent.rangeInsideValue .~ -100
                | otherwise  = sl&percent.rangeInsideValue -~ i
            where per = sl^.percent^.rangeInsideValue
 
-isMaxUp :: Slider -> Bool
-isMaxUp s = s^.percent^.rangeInsideValue >= 100
-isMaxDown :: Slider -> Bool
-isMaxDown s = s^.percent^.rangeInsideValue <= -100
+isSlideUp :: Slider -> Bool
+isSlideUp s = s^.percent^.rangeInsideValue >= 100
+isSlideDown :: Slider -> Bool
+isSlideDown s = s^.percent^.rangeInsideValue <= -100
 
-isMax :: Slider -> Bool
-isMax s = val <= -100 || val >= 100
+isSlideMax :: Slider -> Bool
+isSlideMax s = val <= -100 || val >= 100
     where val = s^.percent^.rangeInsideValue
 
 type RCoord = (Slider, Slider)
 
 getRCoord :: RCoord -> Vec2
-getRCoord (rx, ry) =  V2 (fromR rx) (fromR ry)
-                         where 
-                           slider_size = fromIntegral._slider_size 
-                           persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
-                           fromR :: Slider -> Double
-                           fromR rc = slider_size rc  * (persent rc / 100) + cell_long / 2
+getRCoord (rx, ry) = V2 (fromR rx) (fromR ry)
+    where 
+      slider_size = fromIntegral._slider_size 
+      persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
+      fromR :: Slider -> Double
+      fromR rc = slider_size rc  * (persent rc / 100) + cell_long / 2
 
 slidePositive = slider (cell_long`div`2)  100
 slideNegative = slider (cell_long`div`2) (-100)
@@ -230,13 +223,13 @@ nextDirect (rcx, rcy) = ((rcx', rcy'), xdir ++ ydir)
         maybeToListTuple (rc, dr) = (rc, maybeToList dr)
         (rcx', xdir) = maybeToListTuple $
                          case rcx of 
-                           x | isMaxUp x -> (slideNegative, Just RIGHT)
-                             | isMaxDown x -> (slidePositive, Just LEFT)
+                           x | isSlideUp x -> (slideNegative, Just RIGHT)
+                             | isSlideDown x -> (slidePositive, Just LEFT)
                              | otherwise -> (rcx, Nothing)
         (rcy', ydir) = maybeToListTuple $
                          case rcy of 
-                           y | isMaxUp y -> (slideNegative, Just DOWN)
-                             | isMaxDown y -> (slidePositive, Just UP)
+                           y | isSlideUp y -> (slideNegative, Just DOWN)
+                             | isSlideDown y -> (slidePositive, Just UP)
                              | otherwise -> (rcy, Nothing)
 
 
@@ -296,12 +289,31 @@ data CellState = CellState
                }
 
 data FieldMap = FieldMap 
-              { _mpos :: Cell 
-              , _mobj :: [(CellEnty,CellState)] -- (Enty, 初期State)
+              { _mobj :: [(CellEnty,CellState)] -- (Enty, 初期State)
               , _mchr :: [(CharaEnty,CharaState)] -- (Enty, 初期State)
               , _backpict :: Map.Map (SizedCell25x25,SizedCell25x25) Bitmap
               , _mapsize :: SizeX
               }
+
+field = Map.fromList [(Cell(5,5),
+                      FieldMap [(CellEnty True True, (CellState (Cell(1,1)) center 0))
+                               ,(CellEnty True True, (CellState (Cell(2,2)) center 0))
+                               ] [] (Map.fromList [((SizedCell25x25  (Cell(0,0)) ,SizedCell25x25 (Cell(0,10)))
+                                                    , _maptips_ami_png),
+                                                   ((SizedCell25x25  (Cell(5,0)) ,SizedCell25x25 (Cell(25,25)))
+                                                    , _maptips_grass_png)
+                                                  ]
+                                     ) (Size25x25)
+                      ),
+                      (Cell(5,6),
+                      FieldMap [] []
+                                    (Map.fromList [((SizedCell25x25  (Cell(0,0)) ,SizedCell25x25 (Cell(20,25)))
+                                                    , _maptips_ami_png)
+                                                  ]
+                                     ) (Size25x25)
+                      )
+                      ]
+
 
 makeLenses ''CellEnty
 makeLenses ''CellState
@@ -346,55 +358,59 @@ instance FieldObj CharaObj where
                     where stoppedState = charaState&cellState.elapsedFrames.~0&direct.~dir
 
 
-fieldMap :: FieldMap
-fieldMap =  FieldMap (Cell (5,5)) [(CellEnty True True, (CellState (Cell(1,1)) center 0))
-                                  ,(CellEnty True True, (CellState (Cell(2,2)) center 0))
-                                  ] [] (Map.fromList [((SizedCell25x25  (Cell(0,0)) ,SizedCell25x25 (Cell(0,10)))
-                                                       , _maptips_ami_png),
-                                                      ((SizedCell25x25  (Cell(5,0)) ,SizedCell25x25 (Cell(25,25)))
-                                                       , _maptips_grass_png)
-                                                     ]
-                                        ) (Size25x25)
-
-
-origin :: Vec2
-origin = V2 0 0 
-
 main :: IO (Maybe a)
 main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
     font <- embedIO $ loadFont "VL-Gothic-Regular.ttf"
     let ?font = font
     mainLoop me_enty me_state
 
+drawBackPict :: (Enum a, Monad m, Ord a, Picture2D m, SizedCell a) =>
+                 Vec2 -> Map.Map (a, a) Bitmap -> (Vec2 -> Vec2) -> m ()
+drawBackPict origin bp trans =
+    forM_ (Map.keys bp) 
+                  (\crange -> let b = fromJust (Map.lookup crange bp) :: Bitmap
+                              in forM [(fst crange)..(snd crange)] 
+                                   $ \rc -> let transVal = trans $ picPos origin cell_long (cellValue rc) center
+                                            in translate transVal (bitmap b)
+                  )
+  
+
 mainLoop :: (?font :: Font) => CharaEnty -> CharaState -> Game a
 mainLoop me_enty me_state = do
-    let origin = V2 0 0
+    let initial_origin = V2 0 0
         thick = 2
         whole_rect = (0,0,defaultWidth, defaultHeight)
+        initial_mapIndex = Cell(5,5)
+        currentMap = fromJust $ Map.lookup initial_mapIndex field
 
     io_me_state <- embedIO $ newIORef me_state
-    io_field <- embedIO $ newIORef fieldMap 
+    io_field <- embedIO $ newIORef currentMap 
+    io_mapIndex <- embedIO $ newIORef initial_mapIndex
+    io_origin  <- embedIO $ newIORef initial_origin 
 
     foreverFrame $ do 
         color blue
             $ fillCell (V2 0 0) cell_long $ Cell (5,5)
 
-        (field@(FieldMap mapIdx os cs bp msize)) <- embedIO $ readIORef io_field
+        current_field <- embedIO $ readIORef io_field
+        mapIndex <- embedIO $ readIORef io_mapIndex
+        origin  <-  embedIO $ readIORef io_origin
+        mapM_ (\d -> let inx = adjacentCell mapIndex d
+                     in  case Map.lookup inx field of
+                         Nothing -> return ()
+                         Just m -> drawBackPict origin (m^.backpict) $ transMap (size (m^.mapsize)) d
+              ) allDirection
 
         let cix = zipWith (curry Cell) [0 .. mr] [0 .. mc] :: [Cell]
-            (mr,mc) = size msize
+            (mr,mc) = size $ current_field^.mapsize
+            bp = current_field^.backpict
             me_cell = me_state^.cellState^.cell
 
-        forM_ (Map.keys bp) 
-              (\crange -> let b = fromJust (Map.lookup crange bp) :: Bitmap
-                          in forM [(fst crange)..(snd crange)] 
-                                  (\rc -> let transVal = picPos origin cell_long (cellValue rc) center
-                                          in translate transVal (bitmap b)
-                                  ))
-
         mapM_ id [
+            drawBackPict origin bp id
+            ,
             color red 
-                $ ownCell origin whole_rect cell_long me_enty io_me_state io_field
+                $ ownCell io_origin whole_rect cell_long me_enty io_me_state io_field
             ,
             color yellow 
                 $ thickness 3 
@@ -406,8 +422,21 @@ mainLoop me_enty me_state = do
             ,
             color black 
                 $ translate (V2 40 40) 
-                $ text ?font 40 "Free World"
+                $ text ?font 40 $ show origin 
             ]
+    where
+        _transMap ::  Double -> Direct -> Vec2 -> Vec2
+        _transMap y UP    = (-) $ V2 0 (cell_long*y)
+        _transMap y DOWN  = (+) $ V2 0 (cell_long*y)
+        _transMap x LEFT  = (-) $ V2 (cell_long*x) 0
+        _transMap x RIGHT = (+) $ V2 (cell_long*x) 0
+        transMap :: SizeTuple -> Direct -> Vec2 -> Vec2
+        transMap st dir = let V2 sx sy = coordVec st 
+                          in case dir of
+                             UP -> _transMap sy dir
+                             DOWN -> _transMap sy dir
+                             LEFT -> _transMap sx dir
+                             RIGHT -> _transMap sx dir
 
 key_map :: Map.Map Key Direct
 key_map = Map.fromList _tbl
@@ -422,10 +451,11 @@ turnBack LEFT  = RIGHT
 turnBack UP    = DOWN
 turnBack DOWN  = UP
 
-ownCell :: (?font :: Font) => Vec2 -> Rect -> Double ->
+ownCell :: (?font :: Font) => IORef Vec2 -> Rect -> Double ->
                               CharaEnty -> IORef CharaState ->  IORef FieldMap -> Frame ()
-ownCell origin whole_rect cell_long me me_state io_field = do
-    (FieldMap mcell fobj_ary fchars bp msize) <- embedIO $ readIORef io_field
+ownCell io_origin whole_rect cell_long me me_state io_field = do
+    (FieldMap fobj_ary fchars bp msize) <- embedIO $ readIORef io_field
+    origin <- embedIO $ readIORef io_origin
     me_chara_state <- embedIO $ readIORef me_state
     let me_hp  = me_chara_state^.hp
         me_dir = me_chara_state^.direct
@@ -450,19 +480,27 @@ ownCell origin whole_rect cell_long me me_state io_field = do
         me_cellState' = me_state'^.cellState
         me_pos' = me_cellState'^.pos
         me_cell' = me_cellState'^.cell
+        me_abpos = picPos origin cell_long me_cell' me_pos'
+        origin' :: Vec2
+        origin' =  (case me_abpos of 
+             V2 px py | px <= (defaultWidth/3)    -> (+) $ V2 4 0 
+                      | px >= (defaultWidth*2/3)  -> flip (-) $ V2 4 0
+                      | py <= (defaultHeight/3)   -> (+) $ V2 0 4
+                      | py >= (defaultHeight*2/3) -> flip (-) $ V2 0 4
+                      | otherwise -> id
+                   ) origin
 
-    ainp <- keyPress KeyA
-    when ainp $ fillCells origin cell_long $ peripheralCells me_cell 1
-
+    embedIO $ writeIORef io_origin origin'
     embedIO $ writeIORef me_state me_state'
+    ainp <- keyPress KeyA
+    when ainp $ fillCells origin' cell_long $ peripheralCells me_cell 1
 
-    color yellow $ fillCells origin cell_long obj_cells
-    translate  (picPos origin cell_long me_cell' me_pos')
-        $ bitmap (clip (me', me_state'))
-    translate (V2 240 150) $ text ?font 50 (show me_elapsed)
+
+    color yellow $ fillCells origin' cell_long obj_cells
+    translate me_abpos 
+        $ bitmap $ clip (me', me_state')
+    translate (V2 240 150) $ text ?font 50 (show me_abpos)
     translate (V2 240 250) $ text ?font 50 (show me_cell')
-    -- fillCell origin cell_long ncell
-    -- color blue $ tCell origin cell_long ncell me_dir' $ circle 5
 
 renderGrids :: Rect -> Double -> Frame ()
 renderGrids (x0, y0, w, h) interval = renderStripeH (x0,y0,w,h) interval 
