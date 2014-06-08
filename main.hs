@@ -355,8 +355,9 @@ instance FieldObj CharaObj where
 
     actOn (charaEnty, charaState) (Stop dir)
                 = (charaEnty, stoppedState) 
-                    where stoppedState = charaState&cellState.elapsedFrames.~0&direct.~dir
-
+                    where stoppedState = charaState&charaAction.~Stopping
+                                                   &cellState.elapsedFrames.~0
+                                                   &direct.~dir
 
 main :: IO (Maybe a)
 main = runGame Windowed (Box (V2 0 0) (V2 defaultWidth defaultHeight)) $ do
@@ -472,7 +473,7 @@ ownCell io_origin whole_rect cell_long me me_state io_field = do
         blocked_dir = adjacentDirections obj_cells me_cell
 
         cmd =  case inp_directs of 
-                   Nothing -> Stop me_dir
+                   Nothing -> Nuetral
                    Just dir | dir `elem` blocked_dir -> Stop dir
                             | otherwise -> Walk dir
 
