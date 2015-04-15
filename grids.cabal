@@ -16,7 +16,7 @@ extra-source-files:
 
 Executable grids
   Main-is:    main.hs
-  Hs-Source-Dirs: ./
+  Hs-Source-Dirs: src
   Build-Depends: base >= 2.0
                , free-game >= 1.0
                , containers >= 0.5.0.0

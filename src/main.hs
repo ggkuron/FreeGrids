@@ -23,7 +23,7 @@ defaultWidth, defaultHeight :: (Num a) => a
 defaultWidth = 800
 defaultHeight = 600
 
-loadBitmapsWith [|getDataFileName|] "images"
+loadBitmapsWith [|getDataFileName|] "/images"
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
 type Coord = (Int,Int)
@@ -374,7 +374,6 @@ drawBackPict origin bp trans =
                                    $ \rc -> let transVal = trans $ picPos origin cell_long (cellValue rc) center
                                             in translate transVal (bitmap b)
                   )
-  
 
 mainLoop :: (?font :: Font) => CharaEnty -> CharaState -> Game a
 mainLoop me_enty me_state = do
