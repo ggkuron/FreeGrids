@@ -11,12 +11,12 @@ module Main where
 import qualified FreeGame as F
 import Prelude hiding(const)
 import Control.Monad hiding(const)
--- import Control.Monad.Fix(fix)
 import Control.Applicative((<*>), (<$>))
 import Control.Lens 
 import qualified FRP.Elerea.Simple as E
 import Data.Range.Range 
 import Data.List ((\\))
+import qualified Data.Set as Set
 import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe, maybeToList)
 import qualified Data.Map as Map
 import qualified Data.Array as Array
@@ -26,14 +26,19 @@ import Paths_Grids
 -- debug
 import System.IO(putStrLn)
 
-defaultWidth, defaultHeight, cellLong :: (Num a) => a
+defaultWidth, defaultHeight, cellLong, frameLoop :: (Num a) => a
 defaultWidth = 800
 defaultHeight = 600
 cellLong = 40 
+frameLoop = 1500
 
 F.loadBitmapsWith [|getDataFileName|] "../images"
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
+
+cellRow, cellCol :: Cell -> Int
+cellRow (Cell (r, _)) = r
+cellCol (Cell (_, c)) = c
 
 type XCoord = Int -- →
 type YCoord = Int -- ↓
@@ -153,24 +158,24 @@ blockSizeCell :: (SizedBlock a) => a -> Cell
 blockSizeCell sb = sizeTupleCell $ blockSize sb
 
 instance Ranged SizedBlock25x25 Cell where
-    range = sBrange
-    rangedValue = sBrangedValue
+    range = sbRange
+    rangedValue = sbRangedValue
 
 -- instance (SizedBlock a) => Ranged a Cell where
-sBrange sb = SpanRange (Cell(0,0)) (blockSizeCell sb)
-sBrangedValue = cellValue
+sbRange sb = SpanRange (Cell(0,0)) (blockSizeCell sb)
+sbRangedValue = cellValue
 
-sBsucc sb | cs == cellValue sb   = createBlock $ cv + Cell (1,0)
-          | otherwise = createBlock $ cv + Cell (0,1)
-  where cs = blockSizeCell sb
+sbSucc sb | mr == cellRow (cellValue sb)  = createBlock $ adjacentCell cv DOWN
+          | otherwise = createBlock $ adjacentCell cv RIGHT
+  where mr = cellRow $ blockSizeCell sb ::Int 
         cv = cellValue sb
-sBfromEnum sb = r * mc + c
+sbFromEnum sb = r * mc + c
   where (_, mc) = maxCoord.blockSize $ sb
         Cell (r, c) = cellValue sb
 
 instance Enum(SizedBlock25x25) where
-    succ = sBsucc
-    fromEnum = sBfromEnum
+    succ = sbSucc
+    fromEnum = sbFromEnum
     toEnum i = SizedBlock25x25 $Cell (divMod i 25)
 
 data Slider = Slider 
@@ -221,17 +226,17 @@ slidePositive = slider (cellLong`div`2)  100
 slideNegative = slider (cellLong`div`2) (-100)
 slide0 = slider (cellLong`div`2) 0
 
-slideUpx = slideUp 16 
-slideDownx = slideDown 16 
+_slideUpX = slideUp 16 
+_slideDownX = slideDown 16 
 
 center :: RCoord
 center = (slide0,slide0)
 
 slideRCoord :: RCoord -> Direct -> RCoord
-slideRCoord (rcx, rcy) RIGHT = (slideUpx rcx, rcy) 
-slideRCoord (rcx, rcy) LEFT  = (slideDownx rcx, rcy) 
-slideRCoord (rcx, rcy) UP    = (rcx, slideDownx rcy) 
-slideRCoord (rcx, rcy) DOWN  = (rcx, slideUpx rcy) 
+slideRCoord (rcx, rcy) RIGHT = (_slideUpX rcx, rcy) 
+slideRCoord (rcx, rcy) LEFT  = (_slideDownX rcx, rcy) 
+slideRCoord (rcx, rcy) UP    = (rcx, _slideDownX rcy) 
+slideRCoord (rcx, rcy) DOWN  = (rcx, _slideUpX rcy) 
 
 nextDirect :: RCoord -> (RCoord, [Direct])
 nextDirect (rcx, rcy) = ((rcx', rcy'), xdir ++ ydir)
@@ -250,12 +255,15 @@ nextDirect (rcx, rcy) = ((rcx', rcy'), xdir ++ ydir)
 
 
 data MoveCommand = Nuetral | Walk Direct | Stop Direct deriving (Eq, Show, Ord)
+                 
+data EffectCommand = Evolve | ENothing deriving (Eq, Show, Ord)
 
 data ActionCommand = ActionCommand 
                    { moveCommand :: MoveCommand
+                   , effectCommand :: EffectCommand
                    }
                    
-data CharaAction = Stopping | Walking Direct deriving (Eq, Show, Ord)
+data CharaAction = Stopping | Walking Direct | Whirlslash deriving (Eq, Show, Ord)
 
 
 data CharaProps = CharaProps 
@@ -266,12 +274,18 @@ data CharaProps = CharaProps
 data CharaState = CharaState 
                 { _hp :: Int
                 , _direct :: Direct
-                , _charaAction :: CharaAction
+                , _acting :: CharaAction
                 , _cellState :: CellState
                 }
 
 class CharaStateI a where
     charaDirection :: a -> Direct
+    charaAction :: a -> CharaAction
+
+instance CharaStateI CharaState where
+    charaDirection = _direct
+    charaAction = _acting
+
 
 me_enty :: CharaProps
 me_enty =  CharaProps (CellProps True True ) 
@@ -281,24 +295,21 @@ me_enty =  CharaProps (CellProps True True )
                                      (RIGHT, [_right0_png,_right1_png,_right2_png,_right3_png,_right4_png])
                                     ]
                       )
-me_state :: CharaState
-me_state = CharaState 100 DOWN Stopping (CellState (Cell(5,5)) center 0) 
+me_initialState :: CharaState
+me_initialState = CharaState 100 DOWN Stopping (CellState (Cell(5,5)) center 0) 
 
-me = (me_enty, me_state)
+me = (me_enty, me_initialState)
 
 type Commands = Map.Map Cell ActionCommand
 
 class FieldObj a where
-    clip :: a -> F.Bitmap
-    actOn :: a -> ActionCommand -> a
+    clip :: a -> F.Vec2 -> FieldMap -> F.Frame ()
+    actOn :: ActionCommand -> a -> a
     effect :: a -> Commands -> Commands
 
 
 type CellObj = (CellProps, CellState)
 type Character = (CharaProps, CharaState)
-
-frameLoop = 1500
-
 
 data CellProps = CellProps 
               { _movable :: Bool 
@@ -376,42 +387,78 @@ makeLenses ''CharaProps
 makeLenses ''CharaState
 
 instance FieldObj Character where
-    clip ((CharaProps (CellProps _ _) fside),
-         (CharaState chp cdir action (CellState cell pos elapsed) )) 
-         = case action of
-               Stopping -> (fromJust ( Map.lookup cdir fside)) !! 0
-               Walking dir -> fromJust (Map.lookup dir fside) !! (index elapsed) 
-               where
-                   index et | et < 8 = 1
-                            | et < 16 = 2
-                            | et < 24 = 3
-                            | et < 32 = 4
-                            | otherwise = 4
-    actOn (charaEnty, charaState) (ActionCommand Nuetral)
-          = (charaEnty, charaState&cellState.elapsedFrames.~elapsed') 
-          where
-              elapsed = charaState^.cellState^.elapsedFrames
-              elapsed' = if  elapsed > frameLoop then 0 else elapsed + 1
-    actOn (charaEnty, CharaState chp cdir action (CellState cell pos elapsed)) 
-          (ActionCommand (Walk cmd_dir))
-          = case action of
-             Stopping -> (charaEnty
-                         , CharaState chp cmd_dir (Walking cmd_dir) (CellState cell pos (elapsed+1))) 
-             Walking current_dir 
-                 | current_dir == cmd_dir -> (charaEnty , state') 
-                 | otherwise ->  (charaEnty , CharaState chp cdir Stopping (CellState cell pos 0))
-                where elapsed' = if elapsed > 32 then 0 else elapsed + 1
-                      pos' = slideRCoord pos current_dir
-                      (pos'', dirs') = nextDirect pos'
-                      cell' = sum_move cell dirs' [] :: Cell
-                      state' = CharaState chp current_dir (Walking current_dir ) $
-                                               CellState cell' pos'' elapsed'                  
-    actOn (charaEnty, charaState) (ActionCommand (Stop dir))
-                = (charaEnty, stoppedState) 
-                    where stoppedState = charaState&charaAction.~Stopping
-                                                   &cellState.elapsedFrames.~0
-                                                   &direct.~dir
-    effect (_, state) cmd = Map.insert (state^.cellState^.cell) (ActionCommand Nuetral) cmd
+    clip (props, state) vp f = 
+            let fside = props^.fourSides
+                action = charaAction state
+                elapsed = state^.cellState^.elapsedFrames
+                cdir = state^.direct
+                obj_cells = map ((^.cell).snd) (mapObjects f)
+                c = state^.cellState^.cell :: Cell
+                p = state^.cellState^.pos :: RCoord
+                abpos = picPos vp c p
+                pickUp :: CharaAction -> F.Bitmap
+                pickUp Stopping = (fromJust ( Map.lookup cdir fside)) !! 0
+                pickUp Whirlslash = (fromJust ( Map.lookup cdir fside)) !! 0
+                pickUp (Walking dir) = fromJust (Map.lookup dir fside) !! (index elapsed) 
+                     where index et | et < 8 = 1
+                                    | et < 16 = 2
+                                    | et < 24 = 3
+                                    | otherwise = 4
+            in do 
+              when (action == Whirlslash) $ F.color F.red  $ fillCells vp cellLong $ peripheralCells c 1
+              F.translate abpos $ F.bitmap $ pickUp action
+    actOn cmd (props, states) = 
+        let moveCmd = moveCommand cmd
+            action  = charaAction states
+            effectCmd = effectCommand cmd
+        in (props, effectAct (moveAct moveCmd action) effectCmd)
+        where
+          elapsed = states^.cellState^.elapsedFrames
+          elapsed' = if elapsed > frameLoop then 0 else elapsed + 1
+          actionElapsed = if elapsed > 32 then 0 else elapsed + 1
+          stateChange' = stateChange states
+          moveAct :: MoveCommand -> CharaAction -> CharaState
+          moveAct Nuetral _  = states&cellState.elapsedFrames.~elapsed'
+          moveAct (Walk cmd_dir) Stopping = states&direct.~cmd_dir
+                                                  &acting.~(Walking cmd_dir)
+                                                  &cellState.elapsedFrames.~elapsed'
+          moveAct (Walk cmd_dir) (Walking dir) | dir == cmd_dir
+            = let pos' = slideRCoord (states^.cellState^.pos) dir :: RCoord
+                  (pos'', dirs') = nextDirect pos'
+                  cell' = sum_move (states^.cellState^.cell) dirs' [] :: Cell
+              in states&direct.~dir
+                       &acting.~(Walking dir)
+                       &cellState%~(cell.~cell')
+                                  .(pos.~pos'')
+                                  .(elapsedFrames.~actionElapsed)
+                                                | otherwise 
+            =  states&acting.~Stopping
+                     &cellState.elapsedFrames.~0
+
+          moveAct (Stop dir) _ = states&acting.~Stopping
+                                       &cellState.elapsedFrames.~0
+                                       &direct.~dir 
+          moveAct _ _ = states&acting.~Stopping
+                              &cellState.elapsedFrames.~0
+
+          effectAct state Evolve | state^.acting == Stopping = stateChange state Whirlslash 
+                                 | state^.acting == Whirlslash = stateForward state Whirlslash 10
+                                 | otherwise =  stateChange state Stopping
+          effectAct state ENothing = stateForward state (state^.acting) 32
+
+    -- -- empty decl
+    effect (_, state) cmd = Map.insert (state^.cellState^.cell) (ActionCommand Nuetral ENothing) cmd
+
+stateChange :: CharaState -> CharaAction -> CharaState
+stateChange state act = state&acting.~act
+                             &cellState.elapsedFrames.~0
+
+stateForward state act actionEnd | elapsed > actionEnd = stateChange state Stopping
+                                 | otherwise = state&cellState.elapsedFrames+~1
+    where
+          elapsed = state^.cellState^.elapsedFrames
+
+
 
 main :: IO (Maybe a)
 main = F.runGame F.Windowed (F.Box (F.V2 0 0) (F.V2 defaultWidth defaultHeight)) $ do
@@ -443,41 +490,44 @@ mainLoop me = do
         E.start $ mdo
             cmd      <- E.transfer3 initial_cmd (\k p f cmd -> readCommands cmd k p f) directionKey player' field'
             player   <- E.transfer2 me (\c f p -> movePlayer c p f) cmd field' :: (E.SignalGen (E.Signal Character))
-            player'  <- E.delay  me player 
+            player'  <- E.delay me player 
             field    <- E.transfer initial_map (\p f -> f) player 
             field'   <- E.delay initial_map field
             viewport <- E.transfer2 initial_origin (\p f v -> moveView f p v) player field :: (E.SignalGen (E.Signal F.Vec2))
             return $ render whole_rect <$> player <*> viewport <*> field
     F.foreverFrame $ do
-        inp <- filterM F.keyPress $ Map.keys key_map 
-        join $ F.embedIO $ do
-            directionKeySink $ inp
-            network 
+        inp <- filterM F.keyPress $ Map.keys keyDirectionMap ++ [keyA, keyB]
+        join $ F.embedIO $ directionKeySink inp >> network 
 
 readCommands :: Commands -> [F.Key] -> Character -> FieldMap -> Commands
 readCommands cmd keys c f =
-    let dirInput =  listToMaybe $ map (\k -> fromJust $ Map.lookup k key_map) keys :: Maybe Direct
+    let dirInput = listToMaybe $ concat $ map (\k -> maybeToList $ Map.lookup k keyDirectionMap) keys :: Maybe Direct
         cCell = (snd c)^.cellState^.cell :: Cell
         objCells = map ((^.cell).snd) (mapObjects f)
-        mACmd = Map.lookup cCell cmd :: Maybe ActionCommand
+        mACmd = fromJust $ Map.lookup cCell cmd ::ActionCommand  
+        effectCmd = effectCommand mACmd
         blockedDir = adjacentDirections objCells cCell :: [Direct]
         moveCmd :: MoveCommand
-        moveCmd = case mACmd of
-                     Just mc -> case dirInput of
-                                    Just dir | dir `elem` blockedDir -> Stop dir
-                                             | otherwise -> Walk dir 
-                                    Nothing  -> Nuetral
-                     Nothing -> Nuetral 
-    in Map.insert cCell (ActionCommand{moveCommand = moveCmd}) cmd
+        moveCmd = case dirInput of
+                      Just dir | dir `elem` blockedDir -> Stop dir
+                               | otherwise -> Walk dir 
+                      _ -> Nuetral
+        -- 本当は、Singlanの状態をhandleして生成する
+        effectCmd' :: EffectCommand
+        effectCmd' = case keys of [] -> ENothing
+                                  _ | keyA `elem` keys -> Evolve
+                                    | otherwise ->  ENothing
+    in Map.insert cCell (ActionCommand{moveCommand = moveCmd
+                                      ,effectCommand = effectCmd'}) cmd
 
 render :: (?font :: F.Font) => Rect -> Character -> F.Vec2 -> FieldMap -> F.Frame ()
 render displaySize m@(me, state) vp f = do
     renderBackGround vp f
     renderOwn m vp f
-    renderInfo displaySize m vp f
+    renderDebugInfo displaySize m vp f
     where
-        renderInfo :: (?font :: F.Font) => Rect -> Character -> F.Vec2 -> FieldMap -> F.Frame ()
-        renderInfo displaySize (me, state) vp f = do
+        renderDebugInfo :: (?font :: F.Font) => Rect -> Character -> F.Vec2 -> FieldMap -> F.Frame ()
+        renderDebugInfo displaySize (me, state) vp f = do
             let c = state^.cellState^.cell
                 fobj_ary = mapObjects f
                 fchars = mapCharacters f
@@ -487,27 +537,21 @@ render displaySize m@(me, state) vp f = do
                 $ renderGrids displaySize cellLong
             F.color F.black 
                 $ F.translate (F.V2 150 150) 
-                $ F.text ?font 30 $ show c
+                $ F.text ?font 30 $ show $ state^.acting
             F.color F.black 
                 $ F.translate (F.V2 40 40) 
-                $ F.text ?font 40 $ show vp
+                $ F.text ?font 40 $ show $ state^.cellState^.elapsedFrames
         renderOwn :: Character -> F.Vec2 -> FieldMap -> F.Frame ()
-        renderOwn (me, state) vp f = 
-            let obj_cells = map ((^.cell).snd) (mapObjects f)
-                c  = state^.cellState^.cell :: Cell
-                p  = state^.cellState^.pos :: RCoord
-                abpos = picPos vp c p
-                in  F.translate abpos $ F.bitmap $ clip (me, state)
+        renderOwn  = clip
 
 renderBackGround :: (FieldMapI f) => F.Vec2 -> f -> F.Frame ()
 renderBackGround vp f = do
     let inx = mapIndex f
-    mapM_ (\d -> let i= adjacentCell inx d
+    mapM_ (\d -> let i = adjacentCell inx d
                  in  case Map.lookup i fieldMap of
-                     Nothing -> return ()
-                     Just m -> tileMaps m vp $ transMap (mapSize m) d 
-          ) allDirection
-
+                         Nothing -> return ()
+                         Just m -> tileMaps m vp $ transMap (mapSize m) d 
+          ) allDirection 
     tileMaps f vp id
     where
         _transMap ::  Double -> Direct -> F.Vec2 -> F.Vec2
@@ -523,12 +567,16 @@ renderBackGround vp f = do
                              LEFT  -> _transMap sx dir
                              RIGHT -> _transMap sx dir
 
-key_map :: Map.Map F.Key Direct
-key_map = Map.fromList _tbl
-    where _tbl = [(F.KeyJ, DOWN)
-                 ,(F.KeyK, UP)
-                 ,(F.KeyH, LEFT)
-                 ,(F.KeyL, RIGHT)]
+keyDirectionMap:: Map.Map F.Key Direct
+keyDirectionMap = Map.fromList 
+                      [(F.KeyJ, DOWN)
+                      ,(F.KeyK, UP)
+                      ,(F.KeyH, LEFT)
+                      ,(F.KeyL, RIGHT)]
+
+keyA, keyB :: F.Key
+keyA = F.KeyA
+keyB = F.KeyB
 
 turnBack :: Direct -> Direct
 turnBack RIGHT = LEFT
@@ -538,7 +586,7 @@ turnBack DOWN  = UP
 
 -- 
 movePlayer :: Commands -> Character -> FieldMap -> Character
-movePlayer cmd (me, state) f = actOn (me, state) $ fromJust (Map.lookup (state^.cellState^.cell) cmd)
+movePlayer cmd (me, state) f = actOn (fromJust (Map.lookup (state^.cellState^.cell) cmd)) $ (me, state)
 
 moveView :: FieldMap -> Character -> F.Vec2 -> F.Vec2
 moveView f (me, state) vp =
