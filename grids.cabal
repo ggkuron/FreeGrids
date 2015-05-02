@@ -12,11 +12,21 @@ Cabal-Version:  >=1.8
 data-files: images/*.png, images/maptips/*.png
 
 extra-source-files:
-    nat.hs
+    cell.hs
 
 Executable grids
   Main-is:    main.hs
   Hs-Source-Dirs: src
+  Other-modules: Data.Cell
+               , Data.Slider
+               , World.Data
+               , World.Field.Field
+               , World.Field.Entity.Entity
+               , World.Field.Entity.Character
+               , World.Field.Entities
+               , World.Command
+               , Renderer.Renderer
+               , Renderer.Field
   Build-Depends: base >= 2.0
                , free-game >= 1.0
                , elerea == 2.8.0

@@ -3,8 +3,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecursiveDo #-}
 
 module Main where
@@ -14,299 +12,23 @@ import Control.Monad hiding(const)
 import Control.Applicative((<*>), (<$>))
 import Control.Lens 
 import qualified FRP.Elerea.Simple as E
-import Data.Range.Range 
-import Data.List ((\\))
--- import qualified Data.Set as Set
-import Data.Maybe (catMaybes, fromMaybe, fromJust, listToMaybe, maybeToList)
+import World.Data
+import World.Field.Field
+import World.Field.Entities
+
+import World.Command
+import Renderer.Renderer
+import Renderer.Field
+import Data.Maybe (catMaybes, fromJust, listToMaybe, maybeToList)
 import qualified Data.Map as Map
--- import qualified Data.Array as Array
 import Language.Haskell.TH hiding(Range)
 import Paths_Grids
 -- debug
 -- import System.IO(putStrLn)
+--
 
-defaultWidth, defaultHeight, cellStatic, frameLoop :: (Num a) => a
-defaultWidth = 800
-defaultHeight = 600
-cellStatic = 40 
-frameLoop = 1500
 
 F.loadBitmapsWith [|getDataFileName|] "../images"
-
-newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
-
-cellRow, cellCol :: Cell -> Int
-cellRow (Cell (r, _)) = r
-cellCol (Cell (_, c)) = c
-
-type XCoord = Int -- →
-type YCoord = Int -- ↓
-type Coord = (XCoord, YCoord)
-type Board = [Cell]
-type Rect = (Double,Double,Double,Double)
-
-newtype SizeTuple = SizeTuple Coord
-
-sizeTupleCell :: SizeTuple -> Cell
-sizeTupleCell (SizeTuple c) = Cell c
-
-maxCoord :: SizeTuple -> Coord
-maxCoord (SizeTuple crd) = crd
-
-
-
-data Direct = UP | DOWN | LEFT | RIGHT deriving (Eq, Show, Ord)
-
-instance Num(Cell) where 
-    Cell (a,b) + Cell (c,d) = Cell (a+c, b+d)
-    Cell (a,b) * Cell (c,d) = Cell (a*c, b*d)
-    Cell (a,b) - Cell (c,d) = Cell (a-c, b-d)
-    abs (Cell (a,b)) = Cell (abs a, abs b)
-    signum (Cell (a,b)) = Cell (signum a, signum b) 
-    fromInteger i = Cell (fromInteger i, fromInteger i)
-
-coordVec :: Coord -> F.Vec2
-coordVec (x, y) =  F.V2 (fromIntegral x) (fromIntegral y)
-
-data Edge = UpperLeft | LowerLeft | UpperRight | LowerRight
-               deriving (Eq,Show)
-
-allEdge = [UpperLeft,LowerLeft,LowerRight,UpperRight]
-
-celledge :: Cell -> Edge -> Cell
-celledge (Cell (r,c)) UpperLeft  = Cell (r, c) 
-celledge (Cell (r,c)) LowerLeft  = Cell (r, c+1)
-celledge (Cell (r,c)) LowerRight = Cell (r+1, c+1) 
-celledge (Cell (r,c)) UpperRight = Cell (r+1, c)   
-
-cornerPoint :: SizeTuple -> F.Vec2 -> Double -> Edge -> Cell -> (SizeTuple -> F.Vec2 -> F.Vec2) -> F.Vec2
-cornerPoint sm vp long edge c trans = trans' $ vp + normalMapping long (celledge c edge)
-    where
-        trans' = trans sm :: F.Vec2 -> F.Vec2
-
--- cellTransedLong :: Cell -> Double
--- cellTransedLong c tm =
-
-normalMapping :: Double  -> Cell -> F.Vec2
-normalMapping long (Cell (r,c)) = F.V2 (fromIntegral c * long) (fromIntegral r * long) 
-
-stripeVXModifier :: Fractional a => a -> a -> a -> a
-stripeVXModifier x w m = x + ((w / 2 - x) * m)
-
-yTrans = \y h -> (h - y) / h
-
-normalTrans :: Double ->  SizeTuple -> F.Vec2 ->  F.Vec2 
-normalTrans = transBase yTrans
-
-type CellLong = Double
-
--- cellLong :: (FieldMapI f) => Vec2 -> f -> Cell -> Double 
--- cellLong vp f c = let V2 x _  = vp + normalMapping cellStatic c (celledge c UpperLeft)
---                       SizeTuple (mr, _) = mapSize f
---                 in yTrans x (cellStatic * mr)
--- 
--- ydiff
-transBase :: (Double -> Double ->  Double) -> Double -> SizeTuple -> F.Vec2 -> F.Vec2
-transBase acl m sm (F.V2 x y) = F.V2 (stripeVXModifier x mWidth (ydiff * m)) y
-    where
-        (F.V2 mr mc) = coordVec.maxCoord $ sm :: F.Vec2
-        mWidth = defaultWidth
-        yWidth = mr * cellStatic
-        ydiff = acl y yWidth 
-
-rectCell :: Double -> SizeTuple -> F.Vec2 -> Double -> Cell -> [F.Vec2]
-rectCell m msize origin long c = map (\e -> cornerPoint msize origin long e c (normalTrans m)) allEdge
-
-edgeIn :: F.Affine p => Double -> SizeTuple -> F.Vec2 -> Double -> Cell -> p a -> p a
-edgeIn m sm o l c = F.translate $ cornerPoint sm o l UpperLeft c (normalTrans m)
-
-allDirection :: [Direct]
-allDirection = [UP, LEFT, DOWN, RIGHT]
-
-fromDirect :: Direct -> Direct -> Edge
-fromDirect UP    LEFT  = UpperLeft
-fromDirect LEFT  UP    = UpperLeft
-fromDirect DOWN  LEFT  = LowerLeft
-fromDirect LEFT  DOWN  = LowerLeft
-fromDirect RIGHT DOWN  = LowerRight
-fromDirect DOWN  RIGHT = LowerRight
-fromDirect UP    RIGHT = UpperRight
-fromDirect RIGHT UP    = UpperRight
-
-directLineEdge :: Direct -> [Edge]
-directLineEdge UP    = [UpperRight, UpperLeft]
-directLineEdge LEFT  = [UpperLeft , LowerLeft]
-directLineEdge DOWN  = [LowerLeft , LowerRight]
-directLineEdge RIGHT = [LowerRight, UpperRight]
-
-adjacentCell :: Cell -> Direct -> Cell
-adjacentCell (Cell (r,c)) UP    = Cell (r-1,c)
-adjacentCell (Cell (r,c)) DOWN  = Cell (r+1,c)
-adjacentCell (Cell (r,c)) LEFT  = Cell (r,c-1)
-adjacentCell (Cell (r,c)) RIGHT = Cell (r,c+1)
-
-adjacentDirection :: Cell -> Cell -> Maybe Direct
-adjacentDirection ours theirs = listToMaybe $ filter (\d -> adjacentCell ours d == theirs) allDirection 
-
-sum_move :: Cell -> [Direct] -> [Direct] -> Cell
-sum_move c dirs filter_dir = let dirs' = dirs \\ filter_dir
-                             in flip (foldr (flip adjacentCell)) dirs' c
-
-class Ranged a b where
-    range :: a -> Range b -- (type a) holding Range 
-    rangedValue :: a -> b -- retrieve ranged value (type b) from (type a)
-
-data RangedValue a = RangedValue 
-                   { rangeSize :: Range a
-                   , _rangeInsideValue :: a 
-                   }
-
-makeLenses ''RangedValue
-
-ranged :: Ord a => Range a -> a -> RangedValue a 
-ranged r v | inRange r v = RangedValue {rangeSize = r, _rangeInsideValue = v} 
-
-instance Ranged (RangedValue a) a where
-    range :: RangedValue a -> Range a
-    range = rangeSize
-    rangedValue :: RangedValue a -> a
-    rangedValue = _rangeInsideValue
-
-newtype SizedBlock25x25 = SizedBlock25x25 Cell
-                          deriving(Eq,Show,Ord)
-
-class SizedBlock a where
-    cellValue :: a -> Cell
-    createBlock :: Cell -> a
-    blockSize :: a -> SizeTuple
-
-instance SizedBlock SizedBlock25x25 where
-    cellValue (SizedBlock25x25 c) = c
-    blockSize a = SizeTuple (25,25)
-    createBlock = SizedBlock25x25 
-
-blockSizeCell :: (SizedBlock a) => a -> Cell
-blockSizeCell sb = sizeTupleCell $ blockSize sb
-
-instance Ranged SizedBlock25x25 Cell where
-    range = sbRange
-    rangedValue = sbRangedValue
-
-sbRange sb = SpanRange (Cell(0,0)) (blockSizeCell sb)
-sbRangedValue = cellValue
-
-sbSucc sb | mr == cellRow (cellValue sb)  = createBlock $ adjacentCell cv DOWN
-          | otherwise = createBlock $ adjacentCell cv RIGHT
-  where mr = cellRow $ blockSizeCell sb ::Int 
-        cv = cellValue sb
-sbFromEnum sb = r * mc + c
-  where (_, mc) = maxCoord.blockSize $ sb
-        Cell (r, c) = cellValue sb
-
-instance Enum(SizedBlock25x25) where
-    succ = sbSucc
-    fromEnum = sbFromEnum
-    toEnum i = SizedBlock25x25 $Cell (divMod i 25)
-
-data Slider = Slider 
-            { inner_range :: Range Int
-            , sliderSize :: Int
-            , _percent :: RangedValue Int
-            }
-
-makeLenses ''Slider
-
-slider :: Int -> Int -> Slider
-slider max per = Slider 
-               { inner_range = SpanRange (-max) (max)
-               , sliderSize = max
-               , _percent = ranged (SpanRange (-100) 100) per
-               }
-
-slideUp :: Int -> Slider -> Slider
-slideUp i sl  | per >= 100 = sl&percent.rangeInsideValue .~ 100
-              | otherwise  = sl&percent.rangeInsideValue +~ i
-           where per = sl^.percent^.rangeInsideValue
-slideDown :: Int -> Slider -> Slider
-slideDown i sl | per <= -100 = sl&percent.rangeInsideValue .~ -100
-               | otherwise  = sl&percent.rangeInsideValue -~ i
-           where per = sl^.percent^.rangeInsideValue
-
-isSlideUpped :: Slider -> Bool
-isSlideUpped s = s^.percent^.rangeInsideValue >= 100
-isSlideDowned :: Slider -> Bool
-isSlideDowned s = s^.percent^.rangeInsideValue <= -100
-
-isSlideMax :: Slider -> Bool
-isSlideMax s = val <= -100 || val >= 100
-    where val = s^.percent^.rangeInsideValue
-
-type RCoord = (Slider, Slider)
-
-getRCoord :: RCoord -> F.Vec2
-getRCoord (rx, ry) = F.V2 (fromR rx) (fromR ry)
-    where 
-      sliderSize' = fromIntegral.sliderSize 
-      persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
-      fromR :: Slider -> Double
-      fromR rc = sliderSize' rc  * (persent rc / 100) + cellStatic / 2
-
-slidePositive = slider (cellStatic`div`2)  100
-slideNegative = slider (cellStatic`div`2) (-100)
-slide0 = slider (cellStatic`div`2) 0
-
-_slideUpX = slideUp 16 
-_slideDownX = slideDown 16 
-
-center :: RCoord
-center = (slide0,slide0)
-
-slideRCoord :: RCoord -> Direct -> RCoord
-slideRCoord (rcx, rcy) RIGHT = (_slideUpX rcx, rcy) 
-slideRCoord (rcx, rcy) LEFT  = (_slideDownX rcx, rcy) 
-slideRCoord (rcx, rcy) UP    = (rcx, _slideDownX rcy) 
-slideRCoord (rcx, rcy) DOWN  = (rcx, _slideUpX rcy) 
-
-nextDirect :: RCoord -> (RCoord, [Direct])
-nextDirect (rcx, rcy) = 
-    let slideUpdate s up down | isSlideUpped s = (slideNegative, [up])
-                              | isSlideDowned s = (slidePositive, [down])
-                              | otherwise = (s, [])
-        (rcx', xdir) = slideUpdate rcx RIGHT LEFT
-        (rcy', ydir) = slideUpdate rcy DOWN UP
-    in ((rcx', rcy'), xdir ++ ydir)
-
-
-data MoveCommand = Nuetral | Walk Direct | Stop Direct deriving (Eq, Show, Ord)
-data EffectCommand = Evolve | ENothing deriving (Eq, Show, Ord)
-
-data ActionCommand = ActionCommand 
-                   { moveCommand :: MoveCommand
-                   , effectCommand :: EffectCommand
-                   }
-                   
-data CharaAction = Stopping | Walking Direct | Whirlslash deriving (Eq, Show, Ord)
-
-
-data CharaProps = CharaProps 
-                { _cellProps :: CellProps
-                , _fourSides :: Map.Map Direct [F.Bitmap]
-                }
-
-data CharaState = CharaState 
-                { _hp :: Int
-                , _direct :: Direct
-                , _acting :: CharaAction
-                , _cellState :: CellState
-                }
-
-class CharaStateI a where
-    charaDirection :: a -> Direct
-    charaAction :: a -> CharaAction
-
-instance CharaStateI CharaState where
-    charaDirection = _direct
-    charaAction = _acting
 
 me_enty :: CharaProps
 me_enty =  CharaProps (CellProps True True ) 
@@ -321,60 +43,6 @@ me_initialState = CharaState 100 DOWN Stopping (CellState (Cell(5,5)) center 0)
 
 me = (me_enty, me_initialState)
 
-type Commands = Map.Map Cell ActionCommand
-
-class FieldObj a where
-    clip :: a -> F.Vec2 -> FieldMap -> F.Frame ()
-    actOn :: ActionCommand -> a -> a
-    effect :: a -> Commands -> Commands
-
-type CellObj = (CellProps, CellState)
-type Character = (CharaProps, CharaState)
-
-data CellProps = CellProps 
-               { _movable :: Bool 
-               , _block :: Bool 
-               }
-
-data CellState = CellState 
-               { _cell :: Cell -- 位置
-               , _pos :: RCoord -- Cellからの相対位置
-               , _elapsedFrames :: Int -- 現在の状況での経過フレーム
-               }
-
-picPos :: Double -> SizeTuple -> F.Vec2 -> Cell -> RCoord -> F.Vec2
-picPos m sm o c rc = cornerPoint sm o cellStatic UpperLeft c (normalTrans m) + getRCoord rc
-
-data FieldMap = FieldMap 
-              { fieldIndex :: Cell
-              , mobj :: [(CellProps,CellState)] -- (Enty, 初期State)
-              , mchr :: [(CharaProps,CharaState)] -- (Enty, 初期State)
-              , backpict :: Map.Map (SizedBlock25x25 , SizedBlock25x25) F.Bitmap
-              , mapsize :: SizeTuple
-              }
-
-class FieldMapI a where
-    mapIndex :: a -> Cell
-    mapObjects :: a -> [(CellProps, CellState)]
-    mapCharacters :: a -> [(CharaProps,CharaState)] 
-    tileMaps :: a -> F.Vec2 -> (SizeTuple -> F.Vec2 -> F.Vec2) -> F.Frame ()
-    mapSize :: a -> SizeTuple
-
-transMod = 0.25
- 
-instance FieldMapI FieldMap where
-    mapIndex = fieldIndex 
-    mapObjects = mobj 
-    mapCharacters = mchr
-    mapSize = mapsize
-    tileMaps f vp trans =
-        let bp = backpict f
-        in forM_ (Map.keys bp) $
-                 \crange -> let b = fromJust (Map.lookup crange bp) :: F.Bitmap
-                            in forM_ [(fst crange)..(snd crange)] $
-                                     \rc -> let msize = mapSize f
-                                                transVal = trans msize $ picPos transMod msize vp (cellValue rc) center
-                                            in F.translate transVal (F.bitmap b)
 
 fieldMap = Map.fromList [(Cell(5,5),
                           FieldMap
@@ -390,8 +58,8 @@ fieldMap = Map.fromList [(Cell(5,5),
                                             ]
                               ) 
                               (SizeTuple (25,25))
-                         ),
-                         (Cell(5,6),
+                         )
+                        ,(Cell(5,6),
                           FieldMap 
                               (Cell(5,6))
                               [] 
@@ -403,83 +71,6 @@ fieldMap = Map.fromList [(Cell(5,5),
                               (SizeTuple (25, 25))
                          )
                       ]
-
-makeLenses ''CellProps
-makeLenses ''CellState
-makeLenses ''CharaProps
-makeLenses ''CharaState
-
-instance FieldObj Character where
-    clip (props, state) vp f = 
-        let fside = props^.fourSides
-            action = charaAction state
-            elapsed = state^.cellState^.elapsedFrames
-            cdir = state^.direct
-            mapsize = mapSize f
-            obj_cells = map ((^.cell).snd) (mapObjects f)
-            c = state^.cellState^.cell :: Cell
-            p = state^.cellState^.pos :: RCoord
-            abpos = picPos transMod (mapSize f) vp c p
-            pickUp :: CharaAction -> F.Bitmap
-            pickUp Stopping = (fromJust ( Map.lookup cdir fside)) !! 0
-            pickUp Whirlslash = (fromJust ( Map.lookup cdir fside)) !! 0
-            pickUp (Walking dir) = fromJust (Map.lookup dir fside) !! (index elapsed) 
-                 where index et | et < 8 = 1
-                                | et < 16 = 2
-                                | et < 24 = 3
-                                | otherwise = 4
-        in do 
-          when (action == Whirlslash) $ F.color F.red  $ fillCells transMod mapsize vp cellStatic $ peripheralCells c 1
-          F.translate abpos $ F.bitmap $ pickUp action
-    actOn cmd (props, states) = 
-        let moveCmd = moveCommand cmd
-            action  = charaAction states
-            effectCmd = effectCommand cmd
-        in (props, effectAct (moveAct moveCmd action) effectCmd)
-        where
-          elapsed = states^.cellState^.elapsedFrames
-          elapsed' = if elapsed > frameLoop then 0 else elapsed + 1
-          actionElapsed = if elapsed > 32 then 0 else elapsed + 1
-          stateChange' = stateChange states
-          moveAct :: MoveCommand -> CharaAction -> CharaState
-          moveAct Nuetral _  = states&cellState.elapsedFrames.~elapsed'
-          moveAct (Walk cmd_dir) Stopping = states&direct.~cmd_dir
-                                                  &acting.~(Walking cmd_dir)
-                                                  &cellState.elapsedFrames.~elapsed'
-          moveAct (Walk cmd_dir) (Walking dir) | dir == cmd_dir
-            = let pos' = slideRCoord (states^.cellState^.pos) dir :: RCoord
-                  (pos'', dirs') = nextDirect pos'
-                  cell' = sum_move (states^.cellState^.cell) dirs' [] :: Cell
-              in states&direct.~dir
-                       &acting.~(Walking dir)
-                       &cellState%~(cell.~cell')
-                                  .(pos.~pos'')
-                                  .(elapsedFrames.~actionElapsed)
-                                                | otherwise 
-            =  states&acting.~Stopping
-                     &cellState.elapsedFrames.~0
-          moveAct (Stop dir) _ = states&acting.~Stopping
-                                       &cellState.elapsedFrames.~0
-                                       &direct.~dir 
-          moveAct _ _ = states&acting.~Stopping
-                              &cellState.elapsedFrames.~0
-
-          effectAct state Evolve | state^.acting == Stopping = stateChange state Whirlslash 
-                                 | state^.acting == Whirlslash = stateForward state Whirlslash 60 
-                                 | otherwise =  stateChange state Stopping
-          effectAct state ENothing = stateForward state (state^.acting) 60
-
-    -- -- empty decl
-    effect (_, state) cmd = Map.insert (state^.cellState^.cell) (ActionCommand Nuetral ENothing) cmd
-
-stateChange :: CharaState -> CharaAction -> CharaState
-stateChange state act = state&acting.~act
-                             &cellState.elapsedFrames.~0
-
-stateForward state act actionEnd | elapsed > actionEnd = stateChange state Stopping
-                                 | otherwise = state&cellState.elapsedFrames+~1
-    where
-      elapsed = state^.cellState^.elapsedFrames
 
 main :: IO (Maybe a)
 main = F.runGame F.Windowed (F.Box (F.V2 0 0) (F.V2 defaultWidth defaultHeight)) $ do
@@ -521,9 +112,9 @@ readCommands cmd keys c f =
         moveCmd :: MoveCommand
         moveCmd = case dirInput of
                       Just dir | dir `elem` blockedDir -> Stop dir
-                               | otherwise -> Walk dir 
+                               | otherwise -> Move dir 
                       _ -> Nuetral
-        -- 本当は、Singlanの状態をhandleして生成する
+        -- TODO: Singlanの状態をhandleして生成する
         effectCmd' :: EffectCommand
         effectCmd' = case keys of [] -> ENothing
                                   _ | keyA `elem` keys -> Evolve
@@ -555,7 +146,7 @@ render displaySize m@(me, state) vp f = do
         renderOwn :: Character -> F.Vec2 -> FieldMap -> F.Frame ()
         renderOwn  = clip
 
-        renderBackGround :: (FieldMapI f) => F.Vec2 -> f -> F.Frame ()
+        renderBackGround :: (FieldMapI f, FieldMapR f) => F.Vec2 -> f -> F.Frame ()
         renderBackGround vp f = do
             let inx = mapIndex f
             forM_ allDirection $
@@ -589,12 +180,6 @@ keyA, keyB :: F.Key
 keyA = F.KeyA
 keyB = F.KeyB
 
-turnBack :: Direct -> Direct
-turnBack RIGHT = LEFT
-turnBack LEFT  = RIGHT
-turnBack UP    = DOWN
-turnBack DOWN  = UP
-
 -- 
 movePlayer :: Commands -> Character -> FieldMap -> Character
 movePlayer cmd (me, state) f = actOn (fromJust (Map.lookup (state^.cellState^.cell) cmd)) $ (me, state)
@@ -613,48 +198,3 @@ moveView f (me, state) vp =
                         | otherwise -> id
        ) vp
 
-renderGrids :: Rect -> Double -> F.Frame ()
-renderGrids rect interval = renderStripeH rect interval 
-                                >> renderStripeV rect interval
-
-renderStripeV' :: Rect -> Double -> F.Frame ()
-renderStripeV' (x0, y0, w, h) interval  = zipWithM_ (\x y -> F.line [x,y])
-            [F.V2 (x0 + p)  y0      | p <- [0,interval .. w]] 
-            [F.V2 (x0 + p) (y0 + h) | p <- [0,interval ..]] 
-
-renderStripeH :: Rect -> Double -> F.Frame ()
-renderStripeH (x0, y0, w, h) interval = zipWithM_ (\x y -> F.line [x,y])
-            [F.V2 x0       (y0 + p) | p <- [0,interval .. h]] 
-            [F.V2 (x0 + w) (y0 + p) | p <- [0,interval ..]] 
-renderStripeV (x0, y0, w, h) interval = zipWithM_ (\x y -> F.line [x,y])
-            [F.V2 (stripeVXModifier (x0 + p) (x0 + w) 0.3)  y0 | p <- [0, interval .. w]] 
-            [F.V2 (x0 + p) (y0 + h) | p <- [0, interval ..]] 
-
-
-renderCellOutline :: F.Picture2D p => Double -> SizeTuple -> F.Vec2 -> Double -> Direct -> Cell -> p ()
-renderCellOutline m sm origin long dir c = F.line $ map (\edge -> cornerPoint sm origin long edge c (normalTrans m))  $ directLineEdge dir
-
-fillCell :: F.Picture2D p => Double -> SizeTuple -> F.Vec2 -> Double -> Cell -> p () 
-fillCell m sm origin long c = F.polygon $ rectCell m sm origin long c 
-
-strokeCell :: F.Picture2D p => Double -> SizeTuple -> F.Vec2 -> Double -> Cell -> p ()
-strokeCell m sm origin long c = F.polygonOutline $ rectCell m sm origin long c 
-
-fillCells :: (Monad p, F.Picture2D p) => Double -> SizeTuple ->  F.Vec2 -> Double -> [Cell] -> p ()
-fillCells m sm origin long cs = forM_ cs $ fillCell m sm origin long
-
---
--- strokeCells :: (Monad p, F.Picture2D p) => F.Vec2 -> SizeTuple -> Double -> Double -> [Cell] -> p ()
--- strokeCells origin m long cs = mapM_ render cs
---      where renderCellOutline' = renderCellOutline m origin long
---            adjacents c = adjacentDirections cs c
---            render c =  mapM_ (\d -> renderCellOutline' d c) (adjacents c)
-
-adjacentDirections :: Board -> Cell -> [Direct]
-adjacentDirections board c = catMaybes $ map (adjacentDirection c) board
-
-peripheralCells :: Cell -> Int -> [Cell]
-peripheralCells (Cell (r,c)) w = [Cell (r',c') | r' <- [r-w..r+w] ,c' <- [c-w..c+w]]
-
-adjacentCells :: Board -> Cell -> [Cell]
-adjacentCells board c = filter (`elem` board) (peripheralCells c 1)
