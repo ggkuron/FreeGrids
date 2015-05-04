@@ -3,7 +3,10 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Data.Slider where
+module World.Data.Slider 
+( module World.Data.Slider
+, module Control.Lens
+) where
 
 import qualified Data.Range.Range as R
 import Control.Lens 

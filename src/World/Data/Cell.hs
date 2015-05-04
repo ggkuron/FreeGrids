@@ -1,7 +1,4 @@
-module Data.Cell
-( Cell(..)
-, cellRow
-) where
+module World.Data.Cell where
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
 

@@ -1,13 +1,16 @@
 module World.Data
-( module Data.Cell
-, module Data.Slider
+( module World.Data.Cell
+, module World.Data.Slider
 , module World.Data
+, V2(..)
 ) where
 
-import Data.Cell
-import Data.Slider
+import World.Data.Cell
+import World.Data.Slider
 import Data.Maybe (listToMaybe, catMaybes)
 import Data.List ((\\))
+
+import FreeGame (V2(..), Vec2)
 
 cellStatic :: (Num a) => a
 cellStatic = 40 
@@ -19,21 +22,20 @@ frameLoop = 1500
 
 transMod = 0.25
 
+-- type Coord = (Int, Int)
 
+type Coord = Vec2
 
-type XCoord = Int -- →
-type YCoord = Int -- ↓
-type Coord = (XCoord, YCoord)
 type Board = [Cell]
 type Rect = (Double,Double,Double,Double)
 
-newtype SizeTuple = SizeTuple Coord
+newtype SizeTuple = SizeTuple (Int, Int)
 
 sizeTupleCell :: SizeTuple -> Cell
-sizeTupleCell (SizeTuple c) = Cell c
+sizeTupleCell (SizeTuple t) = Cell t
 
 maxCoord :: SizeTuple -> Coord
-maxCoord (SizeTuple crd) = crd
+maxCoord (SizeTuple (x,y)) = V2 (fromIntegral x) (fromIntegral y)
 
 type RCoord = (Slider, Slider)
 
@@ -126,4 +128,42 @@ nextDirect (rcx, rcy) =
     in ((rcx', rcy'), xdir ++ ydir)
                   
 
+normalMapping :: Int  -> Cell -> Coord
+normalMapping long (Cell (r,c)) = V2 (fromIntegral (c * long)) (fromIntegral (r * long))
+
+rectCell :: Double -> SizeTuple -> Coord -> Int -> Cell -> [Coord]
+rectCell m msize origin long c = map (\e -> cornerPoint msize origin long e c (normalTrans m)) allEdge
+
+cornerPoint :: SizeTuple -> Coord -> Int -> Edge -> Cell -> (SizeTuple -> Coord -> Coord) -> Coord
+cornerPoint sm vp long edge c trans = trans' $ vp + normalMapping long (celledge c edge)
+    where
+        trans' = trans sm :: Coord -> Coord
+
+getRCoord :: RCoord -> Coord
+getRCoord (rx, ry) = V2 (fromR rx) (fromR ry)
+    where 
+      sliderSize' = fromIntegral.sliderSize 
+      persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
+      fromR :: Slider -> Double
+      fromR rc = sliderSize' rc  * (persent rc / 100) + cellStatic / 2
+
+
+yTrans = \y h -> (h - y) / h
+
+normalTrans :: Double ->  SizeTuple -> Coord -> Coord
+normalTrans = transBase yTrans
+
+stripeVXModifier :: Fractional a => a -> a -> a -> a
+stripeVXModifier x w m = x + ((w / 2 - x) * m)
+
+transBase :: (Double -> Double ->  Double) -> Double -> SizeTuple -> Coord -> Coord
+transBase acl m sm (V2 x y) = V2 (stripeVXModifier x mWidth (ydiff * m)) y
+    where
+        V2 mr mc = maxCoord $ sm :: Coord
+        mWidth = defaultWidth
+        yWidth = mr * cellStatic
+        ydiff = acl y yWidth
+
+fieldPosition :: Double -> SizeTuple -> Coord -> Cell -> RCoord -> Coord
+fieldPosition m sm o c rc = cornerPoint sm o cellStatic UpperLeft c (normalTrans m) + getRCoord rc
 

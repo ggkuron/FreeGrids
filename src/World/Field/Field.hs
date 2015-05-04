@@ -2,8 +2,6 @@
 
 module World.Field.Field where
 
-import Data.Cell
-import Data.Slider
 import World.Data
 import World.Field.Entity.Entity
 import World.Field.Entity.Character
@@ -35,7 +33,7 @@ sbSucc sb | mr == cellRow (cellValue sb)  = createBlock $ adjacentCell cv DOWN
   where mr = cellRow $ blockSizeCell sb ::Int 
         cv = cellValue sb
 sbFromEnum sb = r * mc + c
-  where (_, mc) = maxCoord.blockSize $ sb
+  where (SizeTuple (_, mc)) = blockSize $ sb
         Cell (r, c) = cellValue sb
 
 
@@ -71,6 +69,3 @@ instance FieldMapI FieldMap where
 class FieldObject a where
     actOn :: ActionCommand -> a -> a
     effect :: a -> Commands -> Commands
-
-class FieldObjectR a where
-    clip :: a -> F.Vec2 -> FieldMap -> F.Frame ()

@@ -17,8 +17,8 @@ extra-source-files:
 Executable grids
   Main-is:    main.hs
   Hs-Source-Dirs: src
-  Other-modules: Data.Cell
-               , Data.Slider
+  Other-modules: World.Data.Cell
+               , World.Data.Slider
                , World.Data
                , World.Field.Field
                , World.Field.Entity.Entity

@@ -73,3 +73,20 @@ instance FieldObject Character where
     effect (_, state) cmd = M.insert (state^.cellState^.cell) (ActionCommand Nuetral ENothing) cmd
 
 
+movePlayer :: Commands -> Character -> FieldMap -> Character
+movePlayer cmd (me, state) f = actOn (fromJust (M.lookup (state^.cellState^.cell) cmd)) $ (me, state)
+
+moveView :: FieldMap -> Character -> Coord -> Coord
+moveView f (me, state) vp =
+    let
+        c = state^.cellState^.cell :: Cell
+        p  = state^.cellState^.pos :: RCoord
+        abpos = fieldPosition transMod (mapSize f) vp c p
+        in (case abpos of 
+             F.V2 px py | px <= (defaultWidth/3)    -> (+) $ F.V2 4 0 
+                        | px >= (defaultWidth*2/3)  -> flip (-) $ F.V2 4 0
+                        | py <= (defaultHeight/3)   -> (+) $ F.V2 0 4
+                        | py >= (defaultHeight*2/3) -> flip (-) $ F.V2 0 4
+                        | otherwise -> id
+       ) vp
+

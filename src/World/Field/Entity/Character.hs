@@ -8,9 +8,6 @@ import qualified Data.Map as M
 import qualified FreeGame as F
 import Control.Lens 
 
-makeLenses ''CellProps
-makeLenses ''CellState
-
 data CharaProps = CharaProps 
                 { _cellProps :: CellProps
                 , _fourSides :: M.Map Direct [F.Bitmap]

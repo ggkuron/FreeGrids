@@ -1,6 +1,5 @@
 module World.Command where
 
-import Data.Cell
 import World.Data
 import qualified Data.Map as M
 

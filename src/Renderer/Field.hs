@@ -14,7 +14,10 @@ import Control.Lens
 import Data.Maybe (fromJust)
 
 class FieldMapR a where
-    tileMaps :: a -> F.Vec2 -> (SizeTuple -> F.Vec2 -> F.Vec2) -> F.Frame ()
+    tileMaps :: a -> Coord -> (SizeTuple -> Coord -> Coord) -> F.Frame ()
+
+class FieldObjectR a where
+    clip :: (FieldMapI f) => a -> Coord -> f ->  F.Frame ()
 
 instance FieldMapR FieldMap where
     tileMaps f vp trans =
@@ -23,7 +26,7 @@ instance FieldMapR FieldMap where
            \crange -> let b = fromJust (M.lookup crange bp) :: F.Bitmap
                       in forM_ [(fst crange)..(snd crange)] $
                                \rc -> let msize = mapSize f
-                                          transVal = trans msize $ picPos transMod msize vp (cellValue rc) center
+                                          transVal = trans msize $ fieldPosition transMod msize vp (cellValue rc) center
                                       in F.translate transVal (F.bitmap b)
 
 instance FieldObjectR Character where
@@ -36,7 +39,7 @@ instance FieldObjectR Character where
             obj_cells = map ((^.cell).snd) (mapObjects f)
             c = state^.cellState^.cell :: Cell
             p = state^.cellState^.pos :: RCoord
-            abpos = picPos transMod (mapSize f) vp c p
+            abpos = fieldPosition transMod (mapSize f) vp c p
             pickUp :: CharaAction -> F.Bitmap
             pickUp Stopping = (fromJust ( M.lookup cdir fside)) !! 0
             pickUp Whirlslash = (fromJust ( M.lookup cdir fside)) !! 0
@@ -49,8 +52,8 @@ instance FieldObjectR Character where
           when (action == Whirlslash) $ F.color F.red  $ fillCells transMod mapsize vp cellStatic $ peripheralCells c 1
           F.translate abpos $ F.bitmap $ pickUp action
 
-cellLong :: (FieldMapI f) => F.Vec2 -> f -> Cell -> Double 
-cellLong vp f c = let F.V2 x _  = vp + normalMapping cellStatic (celledge c UpperLeft)
+cellLong :: (FieldMapI f) => Coord -> f -> Cell -> Double 
+cellLong vp f c = let V2 x _ = vp + normalMapping cellStatic (celledge c UpperLeft)
                       SizeTuple (mr, _) = mapSize f
                 in yTrans x (cellStatic * (fromIntegral mr))
 
