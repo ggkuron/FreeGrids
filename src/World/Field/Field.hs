@@ -9,7 +9,7 @@ import World.Command
 import qualified Data.Map as M
 import qualified FreeGame as F
 
-newtype SizedBlock25x25 = SizedBlock25x25 Cell
+newtype SizedBlock15x15 = SizedBlock15x15 Cell
                           deriving(Eq,Show,Ord)
 
 class SizedBlock a where
@@ -17,10 +17,10 @@ class SizedBlock a where
     createBlock :: Cell -> a
     blockSize :: a -> SizeTuple
 
-instance SizedBlock SizedBlock25x25 where
-    cellValue (SizedBlock25x25 c) = c
-    blockSize a = SizeTuple (25,25)
-    createBlock = SizedBlock25x25 
+instance SizedBlock SizedBlock15x15 where
+    cellValue (SizedBlock15x15 c) = c
+    blockSize a = SizeTuple (15,15)
+    createBlock = SizedBlock15x15 
 
 blockSizeCell :: (SizedBlock a) => a -> Cell
 blockSizeCell sb = sizeTupleCell $ blockSize sb
@@ -37,20 +37,20 @@ sbFromEnum sb = r * mc + c
         Cell (r, c) = cellValue sb
 
 
-instance Ranged SizedBlock25x25 Cell where
+instance Ranged SizedBlock15x15 Cell where
     range = sbRange
     rangedValue = sbRangedValue
 
-instance Enum(SizedBlock25x25) where
+instance Enum(SizedBlock15x15) where
     succ = sbSucc
     fromEnum = sbFromEnum
-    toEnum i = SizedBlock25x25 $Cell (divMod i 25)
+    toEnum i = SizedBlock15x15 $Cell (divMod i 15)
 
 data FieldMap = FieldMap 
               { fieldIndex :: Cell
               , mobj :: [(CellProps,CellState)] -- (Enty, 初期State)
               , mchr :: [(CharaProps,CharaState)] -- (Enty, 初期State)
-              , backpict :: M.Map (SizedBlock25x25 , SizedBlock25x25) F.Bitmap
+              , backpict :: M.Map (SizedBlock15x15 , SizedBlock15x15) F.Bitmap
               , mapsize :: SizeTuple
               }
 

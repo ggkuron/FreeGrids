@@ -10,8 +10,8 @@ import qualified FreeGame as F
 -- picPos :: Double -> SizeTuple -> Coord -> Cell -> RCoord -> Coord
 -- picPos m sm o c rc = cornerPoint sm o cellStatic UpperLeft c (normalTrans m) + getRCoord rc
 --
-edgeIn :: F.Affine p => Double -> SizeTuple -> Coord -> Int -> Cell -> p a -> p a
-edgeIn m sm o l c = F.translate $ cornerPoint sm o l UpperLeft c (normalTrans m)
+edgeIn :: F.Affine p => Double -> SizeTuple -> Coord -> Cell -> p a -> p a
+edgeIn m sm o c = F.translate $ cornerPoint sm o UpperLeft c 
 
 renderGrids :: Rect -> Double -> F.Frame ()
 renderGrids rect interval = renderStripeH rect interval 
@@ -31,14 +31,14 @@ renderStripeV (x0, y0, w, h) interval = zipWithM_ (\x y -> F.line [x,y])
             [F.V2 (x0 + p) (y0 + h) | p <- [0, interval ..]] 
 
 
-renderCellOutline :: F.Picture2D p => Double -> SizeTuple -> Coord -> Int -> Direct -> Cell -> p ()
-renderCellOutline m sm origin long dir c = F.line $ map (\edge -> cornerPoint sm origin long edge c (normalTrans m))  $ directLineEdge dir
+renderCellOutline :: F.Picture2D p => Double -> SizeTuple -> Coord -> Direct -> Cell -> p ()
+renderCellOutline m sm origin dir c = F.line $ map (\edge -> cornerPoint sm origin edge c)  $ directLineEdge dir
 
-fillCell :: F.Picture2D p => Double -> SizeTuple -> Coord -> Int -> Cell -> p () 
-fillCell m sm origin long c = F.polygon $ rectCell m sm origin long c 
+fillCell :: F.Picture2D p => Double -> SizeTuple -> Coord -> Cell -> p () 
+fillCell m sm origin c = F.polygon $ rectCell m sm origin c 
 
-strokeCell :: F.Picture2D p => Double -> SizeTuple -> Coord -> Int -> Cell -> p ()
-strokeCell m sm origin long c = F.polygonOutline $ rectCell m sm origin long c 
+strokeCell :: F.Picture2D p => Double -> SizeTuple -> Coord -> Cell -> p ()
+strokeCell m sm origin c = F.polygonOutline $ rectCell m sm origin c 
 
 -- strokeCells :: (Monad p, F.Picture2D p) => F.Vec2 -> SizeTuple -> Double -> Double -> [Cell] -> p ()
 -- strokeCells origin m long cs = mapM_ render cs
@@ -47,7 +47,7 @@ strokeCell m sm origin long c = F.polygonOutline $ rectCell m sm origin long c
 --            render c =  mapM_ (\d -> renderCellOutline' d c) (adjacents c)
 
 
-fillCells :: (Monad p, F.Picture2D p) => Double -> SizeTuple ->  Coord -> Int -> [Cell] -> p ()
-fillCells m sm origin long cs = forM_ cs $ fillCell m sm origin long
+fillCells :: (Monad p, F.Picture2D p) => Double -> SizeTuple ->  Coord -> [Cell] -> p ()
+fillCells m sm origin cs = forM_ cs $ fillCell m sm origin
 
 

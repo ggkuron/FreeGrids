@@ -75,9 +75,10 @@ readCommands cmd keys c f =
     in M.insert cCell (ActionCommand{moveCommand = moveCmd
                                       ,effectCommand = effectCmd'}) cmd
 
+
 render :: (?font :: F.Font) => Rect -> Character -> Coord -> FieldMap -> F.Frame ()
 render displaySize m@(me, state) vp f = do
-    renderBackGround vp f
+    renderBackGround m vp f
     renderOwn m vp f
     renderDebugInfo displaySize m vp f
     where
@@ -99,28 +100,39 @@ render displaySize m@(me, state) vp f = do
         renderOwn :: Character -> Coord -> FieldMap -> F.Frame ()
         renderOwn  = clip
 
-        renderBackGround :: (FieldMapI f, FieldMapR f) => Coord -> f -> F.Frame ()
-        renderBackGround vp f = do
+        renderBackGround :: (FieldMapI f, FieldMapR f) => Character -> Coord -> f -> F.Frame ()
+        renderBackGround (_, ms) vp@(V2 x y) f = do
             let inx = mapIndex f
-            forM_ allDirection $
-                  \d -> let i = adjacentCell inx d
-                        in  case M.lookup i fieldMap of
-                                Nothing -> return ()
-                                Just f' -> tileMaps f' (transMap d (mapSize f') vp) $ normalTrans transMod
-            tileMaps f vp $ normalTrans transMod
+                (SizeTuple (mr, mc)) = mapSize f
+                (Cell (r, c)) = ms^.cellState^.cell
+                dirs = (if mr - 7 < r then [DOWN] else if r < 7 then [UP] else [])
+                         ++ (if mc - 7 < c then [RIGHT] else if c < 7 then [LEFT] else [])
+            forM_ dirs $
+                  \d -> let i  = adjacentCell inx d
+                            i' = adjacentCell' inx d
+                        in do 
+                           case M.lookup i fieldMap of
+                             Nothing -> return ()
+                             Just f' -> tileMaps f' (transMap d (mapSize f') vp) (cellLong transMod)
+                           case M.lookup i' fieldMap of
+                             Nothing -> return ()
+                             Just f' -> tileMaps f' (transMap' d (mapSize f') vp) (cellLong transMod)
+            tileMaps f vp  (cellLong transMod)
           where
-            _transMap ::  Double -> Direct -> Coord -> Coord
-            _transMap y UP    = (-) $ V2 0 (cellStatic*y)
-            _transMap y DOWN  = (+) $ V2 0 (cellStatic*y)
-            _transMap x LEFT  = (-) $ V2 (cellStatic*x) 0
-            _transMap x RIGHT = (+) $ V2 (cellStatic*x) 0
-            transMap :: Direct -> SizeTuple ->Coord -> Coord
-            transMap dir st = let V2 sx sy = maxCoord $ st 
-                              in case dir of
-                                 UP    -> _transMap sy dir
-                                 DOWN  -> _transMap sy dir
-                                 LEFT  -> _transMap sx dir
-                                 RIGHT -> _transMap sx dir
+            transMap = transMapBase _transMap
+            transMap' = transMapBase _transMap'
+            transMapBase :: (Coord -> Direct -> Coord -> Coord) -> Direct -> SizeTuple ->Coord -> Coord
+            transMapBase tm dir st = tm (maxCoord $ st) dir
+            _transMap :: Coord -> Direct -> Coord -> Coord
+            _transMap (V2 sx sy) UP vp   = vp - V2 0 (cellStatic*sy) 
+            _transMap (V2 sx sy) DOWN vp = vp + V2 0 (cellStatic*sy)
+            _transMap (V2 sx sy) LEFT vp  = vp - V2 (cellStatic*sx) 0 
+            _transMap (V2 sx sy) RIGHT vp = vp + V2 (cellStatic*sx) 0
+            _transMap' :: Coord -> Direct -> Coord -> Coord
+            _transMap' (V2 sx sy) UP vp   = vp + V2 (cellStatic*sx) (- cellStatic*sy) 
+            _transMap' (V2 sx sy) DOWN vp = vp + V2 (- cellStatic*sx) (cellStatic*sy)
+            _transMap' (V2 sx sy) LEFT vp  = vp + V2 (- cellStatic*sx) (- cellStatic*sy) 
+            _transMap' (V2 sx sy) RIGHT vp = vp + V2 (cellStatic*sx) (cellStatic*sy)
 
 keyDirectionMap:: M.Map F.Key Direct
 keyDirectionMap = M.fromList 
@@ -138,10 +150,10 @@ keyB = F.KeyB
 me_enty :: CharaProps
 me_enty =  CharaProps (CellProps True True ) 
                       (M.fromList [(UP   , [_back0_png,_back1_png,_back2_png,_back3_png,_back4_png]),
-                                     (DOWN , [_front0_png,_front1_png,_front2_png,_front3_png,_front4_png]),
-                                     (LEFT , [_left0_png,_left1_png,_left2_png,_left3_png,_left4_png]),
-                                     (RIGHT, [_right0_png,_right1_png,_right2_png,_right3_png,_right4_png])
-                                    ]
+                                   (DOWN , [_front0_png,_front1_png,_front2_png,_front3_png,_front4_png]),
+                                   (LEFT , [_left0_png,_left1_png,_left2_png,_left3_png,_left4_png]),
+                                   (RIGHT, [_right0_png,_right1_png,_right2_png,_right3_png,_right4_png])
+                                  ]
                       )
 me_initialState :: CharaState
 me_initialState = CharaState 100 DOWN Stopping (CellState (Cell(5,5)) center 0) 
@@ -156,25 +168,82 @@ fieldMap = M.fromList [(Cell(5,5),
                               ,(CellProps True True, (CellState (Cell(2,2)) center 0))
                               ]
                               []
-                              (M.fromList [((SizedBlock25x25  (Cell(0,0)) ,SizedBlock25x25 (Cell(0,10)))
-                                             , _maptips_ami_png)
-                                            ,((SizedBlock25x25  (Cell(5,0)) ,SizedBlock25x25 (Cell(25,25)))
-                                             , _maptips_grass_png)
-                                            ]
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(0,10)))
+                                           , _maptips_ami_png)
+                                          ,((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
+                                           , _maptips_grass_png)
+                                          ]
                               ) 
-                              (SizeTuple (25,25))
+                              (SizeTuple (15,15))
                          )
                         ,(Cell(5,6),
                           FieldMap 
                               (Cell(5,6))
                               [] 
                               []
-                              (M.fromList [((SizedBlock25x25  (Cell(0,0)) ,SizedBlock25x25 (Cell(20,25)))
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
                                               , _maptips_ami_png)
                                             ]
                               )
-                              (SizeTuple (25, 25))
+                              (SizeTuple (15, 15))
                          )
+                        ,(Cell(5,4),
+                          FieldMap 
+                              (Cell(5,6))
+                              [] 
+                              []
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
+                                              , _maptips_ami_png)
+                                            ]
+                              )
+                              (SizeTuple (15, 15))
+                         )
+                        ,(Cell(6,5),
+                          FieldMap 
+                              (Cell(5,6))
+                              [] 
+                              []
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
+                                              , _maptips_ami_png)
+                                            ]
+                              )
+                              (SizeTuple (15, 15))
+                         )
+ 
+                         ,(Cell(4,5),
+                          FieldMap 
+                              (Cell(5,6))
+                              [] 
+                              []
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
+                                              , _maptips_ami_png)
+                                            ]
+                              )
+                              (SizeTuple (15, 15))
+                         )
+                          ,(Cell(4,4),
+                          FieldMap 
+                              (Cell(5,6))
+                              [] 
+                              []
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
+                                              , _maptips_ami_png)
+                                            ]
+                              )
+                              (SizeTuple (15, 15))
+                         )
+                           ,(Cell(4,6),
+                          FieldMap 
+                              (Cell(5,6))
+                              [] 
+                              []
+                              (M.fromList [((SizedBlock15x15  (Cell(0,0)) ,SizedBlock15x15 (Cell(15,15)))
+                                              , _maptips_ami_png)
+                                            ]
+                              )
+                              (SizeTuple (15, 15))
+                         )
+ 
                       ]
 
 

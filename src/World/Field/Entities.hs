@@ -24,11 +24,17 @@ stateChange :: CharaState -> CharaAction -> CharaState
 stateChange state act = state&acting.~act
                              &cellState.elapsedFrames.~0
 
-stateForward state act actionEnd | elapsed > actionEnd = stateChange state Stopping
+stateForward state act actionEnd | (state^.cellState^.elapsedFrames) > actionEnd = stateChange state Stopping
                                  | otherwise = state&cellState.elapsedFrames+~1
-    where
-      elapsed = state^.cellState^.elapsedFrames
 
+nextDirect :: RCoord -> (RCoord, [Direct])
+nextDirect (rcx, rcy) = 
+    let slideUpdate s up down | isSlideUpped s = (slideNegative, [up])
+                              | isSlideDowned s = (slidePositive, [down])
+                              | otherwise = (s, [])
+        (rcx', xdir) = slideUpdate rcx RIGHT LEFT
+        (rcy', ydir) = slideUpdate rcy DOWN UP
+    in ((rcx', rcy'), xdir ++ ydir)
 
 instance FieldObject Character where
     actOn cmd (props, states) = 
@@ -46,7 +52,8 @@ instance FieldObject Character where
           moveAct (Move cmd_dir) Stopping = states&direct.~cmd_dir
                                                   &acting.~(Walking cmd_dir)
                                                   &cellState.elapsedFrames.~elapsed'
-          moveAct (Move cmd_dir) (Walking dir) | dir == cmd_dir
+          moveAct (Move cmd_dir) (Walking dir) 
+            | dir == cmd_dir
             = let pos' = slideRCoord (states^.cellState^.pos) dir :: RCoord
                   (pos'', dirs') = nextDirect pos'
                   cell' = cellMoves (states^.cellState^.cell) dirs' [] :: Cell
@@ -55,7 +62,7 @@ instance FieldObject Character where
                        &cellState%~(cell.~cell')
                                   .(pos.~pos'')
                                   .(elapsedFrames.~actionElapsed)
-                                                | otherwise 
+            | otherwise 
             =  states&acting.~Stopping
                      &cellState.elapsedFrames.~0
           moveAct (Stop dir) _ = states&acting.~Stopping
@@ -81,7 +88,7 @@ moveView f (me, state) vp =
     let
         c = state^.cellState^.cell :: Cell
         p  = state^.cellState^.pos :: RCoord
-        abpos = fieldPosition transMod (mapSize f) vp c p
+        abpos = fieldPosition (mapSize f) vp c p
         in (case abpos of 
              F.V2 px py | px <= (defaultWidth/3)    -> (+) $ F.V2 4 0 
                         | px >= (defaultWidth*2/3)  -> flip (-) $ F.V2 4 0
@@ -90,3 +97,4 @@ moveView f (me, state) vp =
                         | otherwise -> id
        ) vp
 
+-- stripeVXModifier x defaultWidth (yTrans y defaultWidth * transMod) 

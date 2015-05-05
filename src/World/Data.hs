@@ -97,9 +97,15 @@ adjacentCell (Cell (r,c)) DOWN  = Cell (r+1,c)
 adjacentCell (Cell (r,c)) LEFT  = Cell (r,c-1)
 adjacentCell (Cell (r,c)) RIGHT = Cell (r,c+1)
 
+adjacentCell' :: Cell -> Direct -> Cell
+adjacentCell' (Cell (r,c)) UP    = Cell (r-1,c+1)
+adjacentCell' (Cell (r,c)) DOWN  = Cell (r+1,c-1)
+adjacentCell' (Cell (r,c)) LEFT  = Cell (r-1,c-1)
+adjacentCell' (Cell (r,c)) RIGHT = Cell (r+1,c+1)
+
+
 adjacentDirection :: Cell -> Cell -> Maybe Direct
 adjacentDirection ours theirs = listToMaybe $ filter (\d -> adjacentCell ours d == theirs) allDirection 
-
 
 slide0 = slider (cellStatic`div`2) 0
 
@@ -118,26 +124,11 @@ slideRCoord (rcx, rcy) LEFT  = (_slideDownX rcx, rcy)
 slideRCoord (rcx, rcy) UP    = (rcx, _slideDownX rcy) 
 slideRCoord (rcx, rcy) DOWN  = (rcx, _slideUpX rcy) 
 
-nextDirect :: RCoord -> (RCoord, [Direct])
-nextDirect (rcx, rcy) = 
-    let slideUpdate s up down | isSlideUpped s = (slideNegative, [up])
-                              | isSlideDowned s = (slidePositive, [down])
-                              | otherwise = (s, [])
-        (rcx', xdir) = slideUpdate rcx RIGHT LEFT
-        (rcy', ydir) = slideUpdate rcy DOWN UP
-    in ((rcx', rcy'), xdir ++ ydir)
-                  
-
 normalMapping :: Int  -> Cell -> Coord
 normalMapping long (Cell (r,c)) = V2 (fromIntegral (c * long)) (fromIntegral (r * long))
 
-rectCell :: Double -> SizeTuple -> Coord -> Int -> Cell -> [Coord]
-rectCell m msize origin long c = map (\e -> cornerPoint msize origin long e c (normalTrans m)) allEdge
-
-cornerPoint :: SizeTuple -> Coord -> Int -> Edge -> Cell -> (SizeTuple -> Coord -> Coord) -> Coord
-cornerPoint sm vp long edge c trans = trans' $ vp + normalMapping long (celledge c edge)
-    where
-        trans' = trans sm :: Coord -> Coord
+rectCell :: Double -> SizeTuple -> Coord -> Cell -> [Coord]
+rectCell m msize origin c = map (\e -> cornerPoint msize origin e c ) allEdge
 
 getRCoord :: RCoord -> Coord
 getRCoord (rx, ry) = V2 (fromR rx) (fromR ry)
@@ -145,25 +136,35 @@ getRCoord (rx, ry) = V2 (fromR rx) (fromR ry)
       sliderSize' = fromIntegral.sliderSize 
       persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
       fromR :: Slider -> Double
-      fromR rc = sliderSize' rc  * (persent rc / 100) + cellStatic / 2
+      fromR rc = sliderSize' rc * (persent rc / 100) + cellStatic / 2
 
 
 yTrans = \y h -> (h - y) / h
 
-normalTrans :: Double ->  SizeTuple -> Coord -> Coord
-normalTrans = transBase yTrans
-
 stripeVXModifier :: Fractional a => a -> a -> a -> a
 stripeVXModifier x w m = x + ((w / 2 - x) * m)
 
-transBase :: (Double -> Double ->  Double) -> Double -> SizeTuple -> Coord -> Coord
-transBase acl m sm (V2 x y) = V2 (stripeVXModifier x mWidth (ydiff * m)) y
-    where
-        V2 mr mc = maxCoord $ sm :: Coord
-        mWidth = defaultWidth
-        yWidth = mr * cellStatic
-        ydiff = acl y yWidth
+cellLong :: Double -> Coord -> Double 
+cellLong m (V2 x y) = magni
+    where magni = (1.625 - yTrans y defaultWidth) 
 
-fieldPosition :: Double -> SizeTuple -> Coord -> Cell -> RCoord -> Coord
-fieldPosition m sm o c rc = cornerPoint sm o cellStatic UpperLeft c (normalTrans m) + getRCoord rc
+
+normalTrans ::  Double ->  Coord -> Coord
+normalTrans m (V2 x y) = V2 (stripeVXModifier x defaultWidth (ydiff * m)) (cellSumLong m y)
+    where
+        ydiff = yTrans y defaultHeight
+        cellSumLong :: Double -> Double -> Double
+        cellSumLong m y = let ylist  = [y, y-cellStatic ..]
+                              ylist' = takeWhile (> -cellStatic*5) ylist
+                           in foldr (\h a -> a + cellStatic * (cellLong m (V2 0 (h)))) (y / cellStatic) ylist'
+
+cornerPoint :: SizeTuple -> Coord -> Edge -> Cell -> Coord
+cornerPoint sm vp edge c = normalTrans transMod $ vp + normalMapping cellStatic edgeCell
+    where
+        edgeCell = celledge c edge
+
+
+fieldPosition :: SizeTuple -> Coord -> Cell -> RCoord -> Coord
+fieldPosition sm o c rc = cornerPoint sm (o + getRCoord rc) UpperLeft c 
+
 
