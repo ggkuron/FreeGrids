@@ -16,4 +16,3 @@ instance Num(Cell) where
     signum (Cell (a,b)) = Cell (signum a, signum b) 
     fromInteger i = Cell (fromInteger i, fromInteger i)
 
-

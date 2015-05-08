@@ -38,16 +38,14 @@ ranged :: Ord a => Range a -> a -> RangedValue a
 ranged r v | R.inRange r v = RangedValue {rangeSize = r, _rangeInsideValue = v} 
 
 data Slider = Slider 
-            { sliderSize :: Int
-            , _percent :: RangedValue Int
+            { _percent :: RangedValue Int
             }
 
 makeLenses ''Slider
 
-slider :: Int -> Int -> Slider
-slider max per = Slider 
-               { sliderSize = max
-               , _percent = ranged (spanRange (-100) 100) per
+slider :: Int -> Slider
+slider per = Slider 
+               { _percent = ranged (spanRange (-100) 100) per
                }
 
 slideUp :: Int -> Slider -> Slider

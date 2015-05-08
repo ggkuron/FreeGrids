@@ -13,10 +13,12 @@ import Control.Monad
 import Control.Lens
 import Data.Maybe (fromJust)
 
+import Debug.Trace
+
 class FieldMapR a where
     tileMaps :: a ->
                 Coord ->  -- viewpoint
-                (Coord -> Double) -> -- scale
+                (Coord -> Double) -> -- scaler
                 F.Frame ()
 
 class FieldObjectR a where
@@ -25,24 +27,26 @@ class FieldObjectR a where
 instance FieldMapR FieldMap where
     tileMaps f vp sfunc =
         let bp = backpict f
+            mc = mapIndex f
         in forM_ (M.keys bp) $
            \crange -> let b = fromJust (M.lookup crange bp) :: F.Bitmap
                       in forM_ [(fst crange)..(snd crange)] $
-                               \rc -> let transVal = fieldPosition (mapSize f) vp (cellValue rc) center
-                                          scale = sfunc transVal  + 0.05 -- padding
-                                      in F.translate transVal $ F.scale (V2 scale scale) $ (F.bitmap b)
+                               \rc -> let (SizedBlock15x15 fc) = rc -- size specific
+                                          transVal = fieldPosition vp (mapSize f) mc fc center
+                                          scale = (sfunc transVal) / cellStatic * 1.08
+                                      in F.translate transVal $ F.scale (V2 scale scale) $ F.bitmap b
 
 instance FieldObjectR Character where
     clip (props, state) vp f = 
-        let fside = props^.fourSides
-            action = charaAction state
-            elapsed = state^.cellState^.elapsedFrames
+        let elapsed = state^.cellState^.elapsedFrames
             cdir = state^.direct
-            mapsize = mapSize f
-            obj_cells = map ((^.cell).snd) (mapObjects f)
-            c = state^.cellState^.cell :: Cell
+            obj_cells = map ((^.fieldCell).snd) (mapObjects f)
+            fc  = state^.cellState^.fieldCell :: FieldCell
+            mc = state^.cellState^.mapCell :: MapCell
             p = state^.cellState^.pos :: RCoord
-            abpos = fieldPosition (mapSize f) vp c p
+            abpos = fieldPosition vp (mapSize f) mc fc p
+            fside = props^.fourSides
+            action = charaAction state
             pickUp :: CharaAction -> F.Bitmap
             pickUp Stopping = (fromJust ( M.lookup cdir fside)) !! 0
             pickUp Whirlslash = (fromJust ( M.lookup cdir fside)) !! 0
@@ -52,6 +56,6 @@ instance FieldObjectR Character where
                                 | et < 24 = 3
                                 | otherwise = 4
         in do 
-          when (action == Whirlslash) $ F.color F.red  $ fillCells transMod mapsize vp $ peripheralCells c 1
+          when (action == Whirlslash) $ F.color F.red $ fillCells transMod vp (mapSize f) mc $ peripheralFieldCells fc 1
           F.translate abpos $ F.bitmap $ pickUp action
 

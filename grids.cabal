@@ -15,7 +15,7 @@ extra-source-files:
     cell.hs
 
 Executable grids
-  Main-is:    main.hs
+  Main-is:    Main.hs
   Hs-Source-Dirs: src
   Other-modules: World.Data.Cell
                , World.Data.Slider

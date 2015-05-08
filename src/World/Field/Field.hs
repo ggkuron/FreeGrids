@@ -1,4 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 
 module World.Field.Field where
 
@@ -9,63 +12,75 @@ import World.Command
 import qualified Data.Map as M
 import qualified FreeGame as F
 
-newtype SizedBlock15x15 = SizedBlock15x15 Cell
-                          deriving(Eq,Show,Ord)
+
+newtype SizedBlock15x15 a = SizedBlock15x15 a
+                          deriving(Eq,Ord,Show,Functor)
+
+type SizedCell15x15 = SizedBlock15x15 FieldCell
 
 class SizedBlock a where
-    cellValue :: a -> Cell
-    createBlock :: Cell -> a
+    createBlock :: SizeTuple -> a
     blockSize :: a -> SizeTuple
 
-instance SizedBlock SizedBlock15x15 where
-    cellValue (SizedBlock15x15 c) = c
+instance SizedBlock (SizedBlock15x15 FieldCell) where
     blockSize a = SizeTuple (15,15)
-    createBlock = SizedBlock15x15 
+    createBlock (SizeTuple t) = SizedBlock15x15 $ fcell t
 
-blockSizeCell :: (SizedBlock a) => a -> Cell
-blockSizeCell sb = sizeTupleCell $ blockSize sb
+instance CellHolder SizedCell15x15 where
+    cellValue (SizedBlock15x15 (FieldObject c)) = c
+    holdering c = SizedBlock15x15 $ FieldObject c
 
-sbRange sb = spanRange (Cell(0,0)) (blockSizeCell sb)
-sbRangedValue = cellValue
+sbRange sb = spanRange (fcell(0,0)) (blockSizeCell sb)
+    where 
+      blockSizeCell :: (SizedBlock a) => a -> FieldCell
+      blockSizeCell sb = let (SizeTuple t) = blockSize sb
+                             in fcell t
 
-sbSucc sb | mr == cellRow (cellValue sb)  = createBlock $ adjacentCell cv DOWN
-          | otherwise = createBlock $ adjacentCell cv RIGHT
-  where mr = cellRow $ blockSizeCell sb ::Int 
-        cv = cellValue sb
+sbSucc sb | cellRow cv == sizeTupleRow (blockSize sb) = createBlock' (adjacentCell DOWN cv)
+          | otherwise = createBlock' $ adjacentCell RIGHT cv
+  where cv = cellValue sb
+        createBlock' (Cell t) = createBlock (SizeTuple t)
+        
 sbFromEnum sb = r * mc + c
   where (SizeTuple (_, mc)) = blockSize $ sb
         Cell (r, c) = cellValue sb
 
-
-instance Ranged SizedBlock15x15 Cell where
+instance Ranged (SizedBlock15x15 FieldCell) FieldCell where
     range = sbRange
-    rangedValue = sbRangedValue
+    rangedValue (SizedBlock15x15 fc) = fc
 
-instance Enum(SizedBlock15x15) where
+instance Enum SizedCell15x15 where
     succ = sbSucc
     fromEnum = sbFromEnum
-    toEnum i = SizedBlock15x15 $Cell (divMod i 15)
+    toEnum i = SizedBlock15x15 $ fcell (divMod i 15)
 
 data FieldMap = FieldMap 
-              { fieldIndex :: Cell
+              { fieldIndex :: MapCell
               , mobj :: [(CellProps,CellState)] -- (Enty, 初期State)
               , mchr :: [(CharaProps,CharaState)] -- (Enty, 初期State)
-              , backpict :: M.Map (SizedBlock15x15 , SizedBlock15x15) F.Bitmap
+              , backpict :: M.Map (SizedCell15x15 , SizedCell15x15) F.Bitmap
               , mapsize :: SizeTuple
               }
 
+
 class FieldMapI a where
-    mapIndex :: a -> Cell
+    mapIndex :: a -> MapCell
     mapObjects :: a -> [(CellProps, CellState)]
     mapCharacters :: a -> [(CharaProps,CharaState)] 
     mapSize :: a -> SizeTuple
+
+class FieldSheet a where
+    outerEdgeCell :: a -> MapCell -> Direct -> FieldCell -> FieldCell
+    lookupFieldMap :: a -> MapCell -> Maybe FieldMap
 
 instance FieldMapI FieldMap where
     mapIndex = fieldIndex 
     mapObjects = mobj 
     mapCharacters = mchr
     mapSize = mapsize
-
-class FieldObject a where
-    actOn :: ActionCommand -> a -> a
+    
+class FieldActor a where
+    actOn :: (FieldMapI f, FieldSheet fs) => fs -> f -> ActionCommand -> a -> a
     effect :: a -> Commands -> Commands
+
+

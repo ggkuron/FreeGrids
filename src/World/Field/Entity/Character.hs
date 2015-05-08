@@ -14,6 +14,7 @@ data CharaProps = CharaProps
                 }
 makeLenses ''CharaProps
 
+data CharaAction = Stopping | Walking Direct | Whirlslash deriving (Eq, Show, Ord)
 
 data CharaState = CharaState 
                 { _hp :: Int

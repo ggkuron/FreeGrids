@@ -13,4 +13,4 @@ data ActionCommand = ActionCommand
                    }
  
 
-type Commands = M.Map Cell ActionCommand
+type Commands = M.Map (MapCell, FieldCell) ActionCommand
