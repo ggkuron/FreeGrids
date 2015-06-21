@@ -31,13 +31,13 @@ stateForward state act actionEnd | (state^.cellState^.elapsedFrames) > actionEnd
                                  | otherwise = state&cellState.elapsedFrames+~1
 
 nextDirect :: RCoord -> (RCoord, [Direct])
-nextDirect (rcx, rcy) = 
+nextDirect (rcx :!: rcy) = 
     let slideUpdate s up down | isSlideUpped s  = (slideNegative, [up])
                               | isSlideDowned s = (slidePositive, [down])
                               | otherwise = (s, [])
         (rcx', xdir) = slideUpdate rcx RIGHT LEFT
         (rcy', ydir) = slideUpdate rcy DOWN UP
-    in ((rcx', rcy'), xdir ++ ydir)
+    in ((rcx' :!: rcy'), xdir ++ ydir)
 
 instance FieldActor Character where
     actOn fs f cmd (props, states) = 

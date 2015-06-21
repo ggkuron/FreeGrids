@@ -16,6 +16,8 @@ import Data.Maybe (fromJust)
 
 import Control.Parallel.Strategies
 
+import qualified Data.Strict.Tuple as ST
+
 import Debug.Trace
 
 class FieldMapR a where
@@ -40,7 +42,7 @@ tileMapInner f vp sfunc =
                                                                       , (sfunc trans) / cellStatic * 1.08
                                                                       , bmp 
                                                                       ) 
-                                        ) [(fst crange)..(snd crange)] `using` parList rdeepseq
+                                        ) [(ST.fst crange)..(ST.snd crange)] `using` parList rdeepseq
                      ) (M.keys bp) `using` parList rdeepseq 
                )
  

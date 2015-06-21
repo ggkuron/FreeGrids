@@ -37,21 +37,21 @@ type Coord = Vec2
 type Board = [Cell]
 type Rect = (Double,Double,Double,Double)
 
-newtype SizeTuple = SizeTuple (Int, Int) deriving (Eq, Show)
+newtype SizeTuple = SizeTuple (Int :!: Int) deriving (Eq, Show)
 
 sizeTupleCell :: SizeTuple -> Cell
 sizeTupleCell (SizeTuple t) = Cell t
 
 sizeTupleRow :: SizeTuple -> Int
-sizeTupleRow (SizeTuple (r, _)) = r
+sizeTupleRow (SizeTuple (r :!: _)) = r
 sizeTupleCol :: SizeTuple -> Int
-sizeTupleCol (SizeTuple (_, c)) = c
+sizeTupleCol (SizeTuple (_ :!: c)) = c
 
 maxCoord :: SizeTuple -> Coord
-maxCoord (SizeTuple (x,y)) = V2 (fromIntegral x) (fromIntegral (y))
+maxCoord (SizeTuple (x :!: y)) = V2 (fromIntegral x) (fromIntegral y)
 
 
-type RCoord = (Slider, Slider)
+type RCoord = (Slider :!: Slider)
 
 data Direct = UP | DOWN | LEFT | RIGHT deriving (Eq, Show, Ord)
 
@@ -74,8 +74,8 @@ adjacentDirections board c = catMaybes $ ( map (adjacentDirection c) board `usin
 adjacentFieldDirections board c = catMaybes $ ( map (adjacentFieldDirection c) board `using` parList rdeepseq)
 
 
-_peripheralCells :: ((Int, Int) -> a) -> Cell -> Int -> [a]
-_peripheralCells ctr (Cell (r,c)) w = [ctr (r',c') | r' <- [r-w..r+w] ,c' <- [c-w..c+w]]
+_peripheralCells :: ((Int :!: Int) -> a) -> Cell -> Int -> [a]
+_peripheralCells ctr (Cell (r :!: c)) w = [ctr (r' :!: c') | r' <- [r-w..r+w] ,c' <- [c-w..c+w]]
 
 
 peripheralCells :: Cell -> Int -> [Cell]
@@ -91,20 +91,20 @@ adjacentCells board c = filter (`elem` board) (peripheralCells c 1)
 cellOuterDirection :: SizeTuple -> FieldCell -> [Direct]
 cellOuterDirection st to = v st to ++ h st to 
     where 
-         v (SizeTuple (fr, fc)) 
-           (FieldObject (Cell (tr, tc))) | fc < tc = [RIGHT]
-                                         | tc <= 0 = [LEFT]
-                                         | otherwise = []
-         h (SizeTuple (fr, fc)) 
-           (FieldObject (Cell (tr, tc))) | fr < tr = [DOWN] 
-                                         | tr <= 0 = [UP]
-                                         | otherwise = []
+         v (SizeTuple (fr :!: fc)) 
+           (FieldObject (Cell (tr :!: tc))) | fc < tc = [RIGHT]
+                                            | tc <= 0 = [LEFT]
+                                            | otherwise = []
+         h (SizeTuple (fr :!: fc)) 
+           (FieldObject (Cell (tr :!: tc))) | fr < tr = [DOWN] 
+                                            | tr <= 0 = [UP]
+                                            | otherwise = []
 
-edgeTuple :: SizeTuple -> Direct -> Cell -> (Int, Int)
-edgeTuple (SizeTuple (sr,sc)) LEFT  (Cell (r, c)) = (r , 1)
-edgeTuple (SizeTuple (sr,sc)) RIGHT (Cell (r, c)) = (r, sc)
-edgeTuple (SizeTuple (sr,sc)) UP    (Cell (r, c)) = (1,  c)
-edgeTuple (SizeTuple (sr,sc)) DOWN  (Cell (r, c)) = (sr, c)
+edgeTuple :: SizeTuple -> Direct -> Cell -> (Int :!: Int)
+edgeTuple (SizeTuple (sr :!: sc)) LEFT  (Cell (r :!: c)) = (r :!: 1)
+edgeTuple (SizeTuple (sr :!: sc)) RIGHT (Cell (r :!: c)) = (r :!: sc)
+edgeTuple (SizeTuple (sr :!: sc)) UP    (Cell (r :!: c)) = (1 :!: c)
+edgeTuple (SizeTuple (sr :!: sc)) DOWN  (Cell (r :!: c)) = (sr :!: c)
 
 data Edge = UpperLeft | LowerLeft | UpperRight | LowerRight
                deriving (Eq,Show)
@@ -112,10 +112,10 @@ data Edge = UpperLeft | LowerLeft | UpperRight | LowerRight
 allEdge = [UpperLeft,LowerLeft,LowerRight,UpperRight]
 
 celledge :: Edge -> Cell -> Cell
-celledge UpperLeft  (Cell (r,c)) = Cell (r, c) 
-celledge LowerLeft  (Cell (r,c)) = Cell (r, c+1)
-celledge LowerRight (Cell (r,c)) = Cell (r+1, c+1) 
-celledge UpperRight (Cell (r,c)) = Cell (r+1, c)   
+celledge UpperLeft  (Cell (r :!: c)) = Cell (r :!: c) 
+celledge LowerLeft  (Cell (r :!: c)) = Cell (r :!: c+1)
+celledge LowerRight (Cell (r :!: c)) = Cell (r+1 :!: c+1) 
+celledge UpperRight (Cell (r :!: c)) = Cell (r+1 :!: c)   
 
 
 allDirection :: [Direct]
@@ -138,16 +138,16 @@ directLineEdge DOWN  = [LowerLeft , LowerRight]
 directLineEdge RIGHT = [LowerRight, UpperRight]
 
 adjacentCell :: Direct -> Cell -> Cell
-adjacentCell UP    (Cell (r,c)) = Cell (r-1,c)
-adjacentCell DOWN  (Cell (r,c)) = Cell (r+1,c)
-adjacentCell LEFT  (Cell (r,c)) = Cell (r,c-1)
-adjacentCell RIGHT (Cell (r,c)) = Cell (r,c+1)
+adjacentCell UP    (Cell (r :!: c)) = Cell (r-1 :!: c)
+adjacentCell DOWN  (Cell (r :!: c)) = Cell (r+1 :!: c)
+adjacentCell LEFT  (Cell (r :!: c)) = Cell (r :!: c-1)
+adjacentCell RIGHT (Cell (r :!: c)) = Cell (r :!: c+1)
 
 adjacentCell' :: Direct -> Cell -> Cell
-adjacentCell' UP    (Cell (r,c)) = Cell (r-1,c+1)
-adjacentCell' DOWN  (Cell (r,c)) = Cell (r+1,c-1)
-adjacentCell' LEFT  (Cell (r,c)) = Cell (r-1,c-1)
-adjacentCell' RIGHT (Cell (r,c)) = Cell (r+1,c+1)
+adjacentCell' UP    (Cell (r :!: c)) = Cell (r-1 :!: c+1)
+adjacentCell' DOWN  (Cell (r :!: c)) = Cell (r+1 :!: c-1)
+adjacentCell' LEFT  (Cell (r :!: c)) = Cell (r-1 :!: c-1)
+adjacentCell' RIGHT (Cell (r :!: c)) = Cell (r+1 :!: c+1)
 
 
 adjacentDirection :: Cell -> Cell -> Maybe Direct
@@ -162,6 +162,7 @@ class CellHolder c where
 
 newtype MapObject a = MapObject a deriving (Eq, Ord, Show, Functor)
 newtype FieldObject a = FieldObject a deriving (Eq, Ord, Show, Functor)
+
 
 instance Applicative MapObject where
     pure = MapObject
@@ -189,7 +190,7 @@ instance CellHolder FieldCell where
 slide0 = slider 0
 
 center :: RCoord
-center = (slide0,slide0)
+center = (slide0 :!: slide0)
 
 slidePositive = slider 100
 slideNegative = slider (-100)
@@ -198,21 +199,21 @@ _slideUpX = slideUp 16
 _slideDownX = slideDown 16 
 
 slideRCoord :: RCoord -> Direct -> RCoord
-slideRCoord (rcx, rcy) RIGHT = (_slideUpX rcx, rcy) 
-slideRCoord (rcx, rcy) LEFT  = (_slideDownX rcx, rcy) 
-slideRCoord (rcx, rcy) UP    = (rcx, _slideDownX rcy) 
-slideRCoord (rcx, rcy) DOWN  = (rcx, _slideUpX rcy) 
+slideRCoord (rcx :!: rcy) RIGHT = (_slideUpX rcx :!: rcy) 
+slideRCoord (rcx :!: rcy) LEFT  = (_slideDownX rcx :!: rcy) 
+slideRCoord (rcx :!: rcy) UP    = (rcx :!: _slideDownX rcy) 
+slideRCoord (rcx :!: rcy) DOWN  = (rcx :!: _slideUpX rcy) 
 
 normalMapping :: SizeTuple -> MapCell -> FieldCell -> Coord
 normalMapping st mc fc = V2 (fromIntegral (c * cellStatic)) (fromIntegral (r * cellStatic))
     where (MapObject msc) = fmap (sizeTupleCell st *) mc
-          (Cell (r,c)) = cellValue fc + msc 
+          (Cell (r :!: c)) = cellValue fc + msc 
 
 rectCell :: Double -> Coord -> SizeTuple -> MapCell -> FieldCell -> [Coord]
 rectCell m origin st mc c = map (\e -> cornerPoint origin e st mc c) allEdge `using` parList rdeepseq
 
 getRCoord :: Coord -> RCoord -> Coord
-getRCoord crd (rx, ry) = crd + V2 (fromR crd rx) (fromR crd ry)
+getRCoord crd (rx :!: ry) = crd + V2 (fromR crd rx) (fromR crd ry)
 
 fromR :: Coord -> Slider -> Double
 fromR crd rc = let persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
@@ -243,17 +244,17 @@ cornerPoint vp edge st mc c = let np = vp + normalMapping st mc (fmap (celledge 
                 b  = fromIntegral $ round y `mod` cellStatic 
                 cellLong' yy = cellLong transMod (V2 x yy)
                 y' = cellLong' y * b / cellStatic
-                        + if n <= 0 then -cellStatic
+                        + if n <= 0 then - cellStatic
                                     else iterate (\t -> t + cellLong' t) 0 !! n  
                         - cellStatic
                         
 cornerPointOrigin :: Coord
-cornerPointOrigin = cornerPoint (V2 0 0) UpperLeft (SizeTuple (15,15)) (mcell (1,1)) (fcell (1,1))
+cornerPointOrigin = cornerPoint (V2 0 0) UpperLeft (SizeTuple (15 :!: 15)) (mcell (1 :!: 1)) (fcell (1 :!: 1))
 
 
 fieldSizeTrans :: Coord -> Coord
 fieldSizeTrans vp = ncrd - cornerPointOrigin
-    where ncrd = cornerPoint vp UpperLeft (SizeTuple (15,15)) (mcell (2,2)) (fcell (1,1))
+    where ncrd = cornerPoint vp UpperLeft (SizeTuple (15 :!: 15)) (mcell (2 :!: 2)) (fcell (1 :!: 1))
 
 
 
