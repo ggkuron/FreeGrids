@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 module World.Data
 ( module World.Data.Cell
@@ -16,6 +17,8 @@ import Data.List ((\\))
 import Control.Applicative
 import FreeGame (V2(..), Vec2)
 
+import Control.Parallel.Strategies
+import Control.DeepSeq
 import Debug.Trace
 
 cellStatic :: (Num a) => a
@@ -52,6 +55,9 @@ type RCoord = (Slider, Slider)
 
 data Direct = UP | DOWN | LEFT | RIGHT deriving (Eq, Show, Ord)
 
+instance (NFData Direct) where
+    rnf a = a `seq` ()
+
 turnBack :: Direct -> Direct
 turnBack RIGHT = LEFT
 turnBack LEFT  = RIGHT
@@ -63,9 +69,9 @@ cellMoves dirs filter_dir c = let dirs' = dirs \\ filter_dir
                                in foldr adjacentCell c dirs'
   
 adjacentDirections :: Board -> Cell -> [Direct]
-adjacentDirections board c = catMaybes $ map (adjacentDirection c) board
+adjacentDirections board c = catMaybes $ ( map (adjacentDirection c) board `using` parList rdeepseq)
 
-adjacentFieldDirections board c = catMaybes $ map (adjacentFieldDirection c) board
+adjacentFieldDirections board c = catMaybes $ ( map (adjacentFieldDirection c) board `using` parList rdeepseq)
 
 
 _peripheralCells :: ((Int, Int) -> a) -> Cell -> Int -> [a]
@@ -167,6 +173,9 @@ instance Applicative FieldObject where
 type MapCell = MapObject Cell
 type FieldCell = FieldObject Cell
 
+instance (NFData FieldCell) where
+    rnf a = a `seq` ()
+
 fcell t = FieldObject $ Cell t
 mcell t = MapObject $ Cell t
  
@@ -194,13 +203,13 @@ slideRCoord (rcx, rcy) LEFT  = (_slideDownX rcx, rcy)
 slideRCoord (rcx, rcy) UP    = (rcx, _slideDownX rcy) 
 slideRCoord (rcx, rcy) DOWN  = (rcx, _slideUpX rcy) 
 
-normalMapping :: Int -> SizeTuple -> MapCell -> FieldCell -> Coord
-normalMapping long st mc fc = V2 (fromIntegral (c * long)) (fromIntegral (r * long))
+normalMapping :: SizeTuple -> MapCell -> FieldCell -> Coord
+normalMapping st mc fc = V2 (fromIntegral (c * cellStatic)) (fromIntegral (r * cellStatic))
     where (MapObject msc) = fmap (sizeTupleCell st *) mc
           (Cell (r,c)) = cellValue fc + msc 
 
 rectCell :: Double -> Coord -> SizeTuple -> MapCell -> FieldCell -> [Coord]
-rectCell m origin st mc c = map (\e -> cornerPoint origin e st mc c) allEdge
+rectCell m origin st mc c = map (\e -> cornerPoint origin e st mc c) allEdge `using` parList rdeepseq
 
 getRCoord :: Coord -> RCoord -> Coord
 getRCoord crd (rx, ry) = crd + V2 (fromR crd rx) (fromR crd ry)
@@ -224,11 +233,9 @@ normalXmap (V2 x y) = x + transMod * xdiff * ydiff
         xdiff = defaultWidth/2 - x
 
 cornerPoint :: Coord -> Edge -> SizeTuple -> MapCell -> FieldCell -> Coord
-cornerPoint vp edge st mc c = let np = vp + normalMapping cellStatic st mc (cellHolderEdge edge c)
+cornerPoint vp edge st mc c = let np = vp + normalMapping st mc (fmap (celledge edge) c)
                                in normalTrans np
-
     where
-        cellHolderEdge e = fmap (celledge e)
         normalTrans :: Coord -> Coord
         normalTrans v@(V2 x y) = V2 (normalXmap v) y'
             where

@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 
 module World.Field.Field where
@@ -12,6 +13,7 @@ import World.Command
 import qualified Data.Map as M
 import qualified FreeGame as F
 
+import Control.DeepSeq
 
 newtype SizedBlock15x15 a = SizedBlock15x15 a
                           deriving(Eq,Ord,Show,Functor)
@@ -62,6 +64,8 @@ data FieldMap = FieldMap
               , mapsize :: SizeTuple
               }
 
+instance (NFData FieldMap) where
+    rnf a = a `seq` ()
 
 class FieldMapI a where
     mapIndex :: a -> MapCell

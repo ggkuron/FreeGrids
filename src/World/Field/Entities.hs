@@ -32,7 +32,7 @@ stateForward state act actionEnd | (state^.cellState^.elapsedFrames) > actionEnd
 
 nextDirect :: RCoord -> (RCoord, [Direct])
 nextDirect (rcx, rcy) = 
-    let slideUpdate s up down | isSlideUpped s = (slideNegative, [up])
+    let slideUpdate s up down | isSlideUpped s  = (slideNegative, [up])
                               | isSlideDowned s = (slidePositive, [down])
                               | otherwise = (s, [])
         (rcx', xdir) = slideUpdate rcx RIGHT LEFT

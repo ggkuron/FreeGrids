@@ -1,4 +1,8 @@
-module World.Data.Cell where
+{-# LANGUAGE TypeOperators #-}
+
+module World.Data.Cell
+( module World.Data.Cell
+) where
 
 newtype Cell = Cell (Int, Int) deriving (Eq,Show,Ord)
 
