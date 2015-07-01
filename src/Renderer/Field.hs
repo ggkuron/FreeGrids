@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Renderer.Field where
 
+import Prelude 
 import Control.Monad
 import Data.Maybe(fromJust)
 import World.Data
@@ -13,6 +14,10 @@ import Control.Monad
 import Control.Lens
 import Data.Maybe (fromJust)
 
+import Control.Parallel.Strategies
+
+import qualified Data.Strict.Tuple as ST
+
 import Debug.Trace
 
 class FieldMapR a where
@@ -21,26 +26,37 @@ class FieldMapR a where
                 (Coord -> Double) -> -- scaler
                 F.Frame ()
 
+
 class FieldObjectR a where
     clip :: (FieldMapI f) => a -> Coord -> f ->  F.Frame ()
 
+
+tileMapInner :: FieldMap -> Coord -> (Coord -> Double) -> [(Coord, Double, F.Bitmap)]
+tileMapInner f vp sfunc =
+    let bp = backpict f
+        ms = mapSize f
+        mi = mapIndex f
+     in concat (map (\crange -> let bmp = fromJust $ M.lookup crange bp
+                                 in map (\(SizedBlock15x15 fc) -> let trans = fieldPosition vp ms mi fc center
+                                                                   in ( trans
+                                                                      , (sfunc trans) / cellStatic * 1.08
+                                                                      , bmp 
+                                                                      ) 
+                                        ) [(ST.fst crange)..(ST.snd crange)] `using` parList rdeepseq
+                     ) (M.keys bp) `using` parList rdeepseq 
+               )
+ 
+
 instance FieldMapR FieldMap where
-    tileMaps f vp sfunc =
-        let bp = backpict f
-            mc = mapIndex f
-        in forM_ (M.keys bp) $
-           \crange -> let b = fromJust (M.lookup crange bp) :: F.Bitmap
-                      in forM_ [(fst crange)..(snd crange)] $
-                               \rc -> let (SizedBlock15x15 fc) = rc -- size specific
-                                          transVal = fieldPosition vp (mapSize f) mc fc center
-                                          scale = (sfunc transVal) / cellStatic * 1.08
-                                      in F.translate transVal $ F.scale (V2 scale scale) $ F.bitmap b
+    tileMaps f vp sfunc = forM_ (tileMapInner f vp sfunc)
+                          $ \(crd, s, bmp) -> F.translate crd $ F.scale (V2 s s) $ F.bitmap bmp
+
 
 instance FieldObjectR Character where
     clip (props, state) vp f = 
         let elapsed = state^.cellState^.elapsedFrames
             cdir = state^.direct
-            obj_cells = map ((^.fieldCell).snd) (mapObjects f)
+            obj_cells = map ((^.fieldCell).(Prelude.snd)) (mapObjects f)
             fc  = state^.cellState^.fieldCell :: FieldCell
             mc = state^.cellState^.mapCell :: MapCell
             p = state^.cellState^.pos :: RCoord

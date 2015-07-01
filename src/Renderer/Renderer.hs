@@ -6,6 +6,10 @@ import Control.Lens
 import Control.Monad
 import qualified FreeGame as F
 
+import Control.DeepSeq
+
+instance (NFData F.Bitmap) where
+    rnf a = a `seq` ()
 
 -- edgeIn :: F.Affine p => Double -> Coord -> MapCell -> FieldCell -> p a -> p a
 -- edgeIn m o mc c = F.translate $ cornerPoint o UpperLeft mc c 
