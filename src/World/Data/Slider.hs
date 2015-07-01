@@ -12,13 +12,11 @@ import qualified Data.Range.Range as R
 import Control.Lens 
 
 type Range = R.Range
-
 spanRange = R.SpanRange
 
 class Ranged a b where
     range :: a -> Range b -- (type a) holding Range 
     rangedValue :: a -> b -- retrieve ranged value (type b) from (type a)
-
 
 data RangedValue a = RangedValue 
                    { rangeSize :: Range a
@@ -37,32 +35,26 @@ instance Ranged (RangedValue a) a where
 ranged :: Ord a => Range a -> a -> RangedValue a 
 ranged r v | R.inRange r v = RangedValue {rangeSize = r, _rangeInsideValue = v} 
 
-data Slider = Slider 
-            { _percent :: RangedValue Int
-            }
-
-makeLenses ''Slider
+type Slider = RangedValue Int
 
 slider :: Int -> Slider
-slider per = Slider 
-               { _percent = ranged (spanRange (-100) 100) per
-               }
+slider per = ranged (spanRange (-100) 100) per
 
 slideUp :: Int -> Slider -> Slider
-slideUp i sl  | per >= 100 = sl&percent.rangeInsideValue .~ 100
-              | otherwise  = sl&percent.rangeInsideValue +~ i
-           where per = sl^.percent^.rangeInsideValue
+slideUp i sl  | per >= 100 = sl&rangeInsideValue .~ 100
+              | otherwise  = sl&rangeInsideValue +~ i
+           where per = sl^.rangeInsideValue
 slideDown :: Int -> Slider -> Slider
-slideDown i sl | per <= -100 = sl&percent.rangeInsideValue .~ -100
-               | otherwise  = sl&percent.rangeInsideValue -~ i
-           where per = sl^.percent^.rangeInsideValue
+slideDown i sl | per <= -100 = sl&rangeInsideValue .~ -100
+               | otherwise  = sl&rangeInsideValue -~ i
+           where per = sl^.rangeInsideValue
 
 isSlideUpped :: Slider -> Bool
-isSlideUpped s = s^.percent^.rangeInsideValue >= 100
+isSlideUpped s = s^.rangeInsideValue >= 100
 isSlideDowned :: Slider -> Bool
-isSlideDowned s = s^.percent^.rangeInsideValue <= -100
+isSlideDowned s = s^.rangeInsideValue <= -100
 
 isSlideMax :: Slider -> Bool
 isSlideMax s = val <= -100 || val >= 100
-    where val = s^.percent^.rangeInsideValue
+    where val = s^.rangeInsideValue
 

@@ -216,7 +216,7 @@ getRCoord :: Coord -> RCoord -> Coord
 getRCoord crd (rx :!: ry) = crd + V2 (fromR crd rx) (fromR crd ry)
 
 fromR :: Coord -> Slider -> Double
-fromR crd rc = let persent rc = fromIntegral $ rc^.percent^.rangeInsideValue :: Double
+fromR crd rc = let persent rc = fromIntegral $ rc^.rangeInsideValue :: Double
                    sliderSize = cellLong transMod crd / 2
                 in sliderSize * persent rc / 100
 
