@@ -51,12 +51,7 @@ instance FieldMapR FieldMap where
     tileMaps f vp sfunc = forM_ (tileMapInner f vp sfunc)
                           $ \(crd, s, bmp) -> F.translate crd $ F.scale (V2 s s) $ F.bitmap bmp
 
-        -- let bp = backpict f
-        -- in forM_ (M.keys bp) $
-        --    \crange -> mapM (\(SizedBlock15x15 fc) -> let transVal = fieldPosition vp (mapSize f) (mapIndex f) fc center;
-        --                                                  scale = (sfunc transVal) / cellStatic * 1.08;
-        --                                               in F.translate transVal $ F.scale (V2 scale scale) $ F.bitmap (fromJust $ M.lookup crange bp)
-        --               ) [(fst crange)..(snd crange)]
+
 instance FieldObjectR Character where
     clip (props, state) vp f = 
         let elapsed = state^.cellState^.elapsedFrames
