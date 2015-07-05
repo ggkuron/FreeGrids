@@ -251,12 +251,9 @@ cornerPoint vp edge st mc c = let np = vp + normalMapping st mc (fmap (celledge 
 cornerPointOrigin :: Coord
 cornerPointOrigin = cornerPoint (V2 0 0) UpperLeft (SizeTuple (15 :!: 15)) (mcell (1 :!: 1)) (fcell (1 :!: 1))
 
-
 fieldSizeTrans :: Coord -> Coord
 fieldSizeTrans vp = ncrd - cornerPointOrigin
     where ncrd = cornerPoint vp UpperLeft (SizeTuple (15 :!: 15)) (mcell (2 :!: 2)) (fcell (1 :!: 1))
-
-
 
 fieldPosition :: Coord -> SizeTuple -> MapCell -> FieldCell -> RCoord -> Coord
 fieldPosition vp st mc c rc = getRCoord (cornerPoint vp UpperLeft st mc c) rc
