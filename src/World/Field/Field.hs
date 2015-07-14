@@ -20,6 +20,9 @@ newtype SizedBlock15x15 a = SizedBlock15x15 a
 
 type SizedCell15x15 = SizedBlock15x15 FieldCell
 
+-- Ix a => SizeBlock a 
+-- でblockSize不要 
+
 class SizedBlock a where
     createBlock :: SizeTuple -> a
     blockSize :: a -> SizeTuple
@@ -32,11 +35,11 @@ instance CellHolder SizedCell15x15 where
     cellValue (SizedBlock15x15 (FieldObject c)) = c
     holdering c = SizedBlock15x15 $ FieldObject c
 
-sbRange sb = spanRange (fcell(0 :!: 0)) (blockSizeCell sb)
-    where 
-      blockSizeCell :: (SizedBlock a) => a -> FieldCell
-      blockSizeCell sb = let (SizeTuple t) = blockSize sb
-                             in fcell t
+-- sbRange sb = spanRange (fcell(0 :!: 0)) (blockSizeCell sb)
+--     where 
+--       blockSizeCell :: (SizedBlock a) => a -> FieldCell
+--       blockSizeCell sb = let (SizeTuple t) = blockSize sb
+--                              in fcell t
 
 sbSucc sb | cellRow cv == sizeTupleRow (blockSize sb) = createBlock' (adjacentCell DOWN cv)
           | otherwise = createBlock' $ adjacentCell RIGHT cv
@@ -47,15 +50,15 @@ sbFromEnum sb = let (SizeTuple (_ :!: mc)) = blockSize sb
                     Cell (r :!: c) = cellValue sb
                  in r * mc + c
 
-instance Ranged (SizedBlock15x15 FieldCell) FieldCell where
-    range = sbRange
-    rangedValue (SizedBlock15x15 fc) = fc
+-- instance Ranged (SizedBlock15x15 FieldCell) FieldCell where
+--     range = sbRange
+--     rangedValue (SizedBlock15x15 fc) = fc
 
 instance Enum SizedCell15x15 where
     succ = sbSucc
     fromEnum = sbFromEnum
     toEnum i = let (d, m) = divMod i 15
-                 in SizedBlock15x15 $ fcell (d :!: m)
+                in SizedBlock15x15 $ fcell (d :!: m)
 
 data FieldMap = FieldMap 
               { fieldIndex :: MapCell

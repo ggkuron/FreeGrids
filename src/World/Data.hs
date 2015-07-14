@@ -37,7 +37,7 @@ type Coord = Vec2
 type Board = [Cell]
 type Rect = (Double,Double,Double,Double)
 
-newtype SizeTuple = SizeTuple (Int :!: Int) deriving (Eq, Show)
+newtype SizeTuple = SizeTuple (Int :!: Int) deriving (Eq, Ord, Show)
 
 sizeTupleCell :: SizeTuple -> Cell
 sizeTupleCell (SizeTuple t) = Cell t
@@ -195,8 +195,8 @@ center = (slide0 :!: slide0)
 slidePositive = slider 100
 slideNegative = slider (-100)
 
-_slideUpX = slideUp 16 
-_slideDownX = slideDown 16 
+_slideUpX = slideUp (+ 16)
+_slideDownX = slideDown $ flip (-) 16
 
 slideRCoord :: RCoord -> Direct -> RCoord
 slideRCoord (rcx :!: rcy) RIGHT = (_slideUpX rcx :!: rcy) 
@@ -216,7 +216,7 @@ getRCoord :: Coord -> RCoord -> Coord
 getRCoord crd (rx :!: ry) = crd + V2 (fromR crd rx) (fromR crd ry)
 
 fromR :: Coord -> Slider -> Double
-fromR crd rc = let persent rc = fromIntegral $ rc^.rangeInsideValue :: Double
+fromR crd rc = let persent rc = fromIntegral $ bval rc :: Double
                    sliderSize = cellLong transMod crd / 2
                 in sliderSize * persent rc / 100
 

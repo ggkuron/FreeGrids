@@ -8,53 +8,51 @@ module World.Data.Slider
 , module Control.Lens
 ) where
 
-import qualified Data.Range.Range as R
+import Data.Ix
 import Control.Lens 
 
-type Range = R.Range
-spanRange = R.SpanRange
+-- (Ix a)
+data Bound a = Bound (a, a) a
+    deriving Show
 
-class Ranged a b where
-    range :: a -> Range b -- (type a) holding Range 
-    rangedValue :: a -> b -- retrieve ranged value (type b) from (type a)
+-- Bound a -> a -> Bound a
 
-data RangedValue a = RangedValue 
-                   { rangeSize :: Range a
-                   , _rangeInsideValue :: a 
-                   }
-
-makeLenses ''RangedValue
-
-instance Ranged (RangedValue a) a where
-    range :: RangedValue a -> Range a
-    range = rangeSize
-    rangedValue :: RangedValue a -> a
-    rangedValue = _rangeInsideValue
-
-
-ranged :: Ord a => Range a -> a -> RangedValue a 
-ranged r v | R.inRange r v = RangedValue {rangeSize = r, _rangeInsideValue = v} 
-
-type Slider = RangedValue Int
+type Slider = Bound Int
 
 slider :: Int -> Slider
-slider per = ranged (spanRange (-100) 100) per
+slider per = Bound (-100, 100) per
 
-slideUp :: Int -> Slider -> Slider
-slideUp i sl  | per >= 100 = sl&rangeInsideValue .~ 100
-              | otherwise  = sl&rangeInsideValue +~ i
-           where per = sl^.rangeInsideValue
-slideDown :: Int -> Slider -> Slider
-slideDown i sl | per <= -100 = sl&rangeInsideValue .~ -100
-               | otherwise  = sl&rangeInsideValue -~ i
-           where per = sl^.rangeInsideValue
+instance Bounded Slider where
+    minBound = slider $ -100
+    maxBound = slider 100
+
+-- instance Monad Bound where
+--     m >>= f = f $ bval m
+--     return m = slider  
+
+bmin (Bound (min, _) _) = min
+bmax (Bound (_, max) _) = max
+bval (Bound (_, _) val) = val
+
+
+-- isMaxBound :: (Eq a) => Bound a -> Bool
+-- isMaxBound (Bound (_, max) val) = max == val
+-- isMinBound (Bound (min, _) val) = min == val
+
+slideUp :: (Int -> Int) -> Slider -> Slider
+slideUp f b | isSlideUpped b = b 
+            | otherwise  = slider $ f.bval $ b
+
+slideDown :: (Int -> Int) -> Slider -> Slider
+slideDown f b | isSlideDowned b = b 
+              | otherwise  = slider $ f.bval $ b
 
 isSlideUpped :: Slider -> Bool
-isSlideUpped s = s^.rangeInsideValue >= 100
+isSlideUpped (Bound (_, max) val) = max >= val
+
 isSlideDowned :: Slider -> Bool
-isSlideDowned s = s^.rangeInsideValue <= -100
+isSlideDowned (Bound (min, _) val) = min <= val
 
 isSlideMax :: Slider -> Bool
-isSlideMax s = val <= -100 || val >= 100
-    where val = s^.rangeInsideValue
+isSlideMax s = or $ map (\f -> f s) [isSlideUpped, isSlideDowned] 
 
