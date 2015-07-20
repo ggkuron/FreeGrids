@@ -2,21 +2,18 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 module World.Data.Slider 
 ( module World.Data.Slider
 , module Control.Lens
 ) where
 
-import Data.Ix
 import Control.Lens 
+import Prelude hiding(max, min)
 
--- (Ix a)
 data Bound a = Bound (a, a) a
-    deriving Show
-
--- Bound a -> a -> Bound a
-
+    deriving (Show,Eq)
 type Slider = Bound Int
 
 slider :: Int -> Slider
@@ -26,32 +23,25 @@ instance Bounded Slider where
     minBound = slider $ -100
     maxBound = slider 100
 
--- instance Monad Bound where
---     m >>= f = f $ bval m
---     return m = slider  
-
+bmin, bmax, bval :: forall t. Bound t -> t
 bmin (Bound (min, _) _) = min
 bmax (Bound (_, max) _) = max
 bval (Bound (_, _) val) = val
 
 
--- isMaxBound :: (Eq a) => Bound a -> Bool
--- isMaxBound (Bound (_, max) val) = max == val
--- isMinBound (Bound (min, _) val) = min == val
-
 slideUp :: (Int -> Int) -> Slider -> Slider
-slideUp f b | isSlideUpped b = b 
+slideUp f b | isSlideUpped b = slider 100
             | otherwise  = slider $ f.bval $ b
 
 slideDown :: (Int -> Int) -> Slider -> Slider
-slideDown f b | isSlideDowned b = b 
+slideDown f b | isSlideDowned b = slider $ -100
               | otherwise  = slider $ f.bval $ b
 
 isSlideUpped :: Slider -> Bool
-isSlideUpped (Bound (_, max) val) = max >= val
+isSlideUpped (Bound (_, max) val) = max <= val
 
 isSlideDowned :: Slider -> Bool
-isSlideDowned (Bound (min, _) val) = min <= val
+isSlideDowned (Bound (min, _) val) = min >= val
 
 isSlideMax :: Slider -> Bool
 isSlideMax s = or $ map (\f -> f s) [isSlideUpped, isSlideDowned] 

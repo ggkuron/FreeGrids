@@ -1,4 +1,4 @@
-Name:   Grids
+Name:   grids
 Version: 0.0
 Synopsis: 
 Description: 
@@ -15,9 +15,9 @@ extra-source-files:
     cell.hs
 
 Executable grids
-  Main-is:    Main.hs
-  Hs-Source-Dirs: src
-  Other-modules: World.Data.Cell
+  main-is:    Main.hs
+  hs-source-dirs: src
+  other-modules: World.Data.Cell
                , World.Data.Slider
                , World.Data
                , World.Field.Field
@@ -27,7 +27,7 @@ Executable grids
                , World.Command
                , Renderer.Renderer
                , Renderer.Field
-  Build-Depends: base >= 2.0
+  build-depends: base >= 2.0
                , free-game >= 1.0
                , elerea == 2.8.0
                , containers >= 0.5.0.0
@@ -40,3 +40,23 @@ Executable grids
                , strict
   ghc-options: -O2 -rtsopts -eventlog -threaded "-with-rtsopts=-N4 -s -l"
 
+test-suite spec
+    type: exitcode-stdio-1.0
+    ghc-options: -Wall
+    hs-source-dirs: test
+                 ,  src
+    main-is: Spec.hs
+    build-depends: base >= 2.0
+               , free-game >= 1.0
+               , elerea == 2.8.0
+               , containers >= 0.5.0.0
+               , lens >= 4.1.2
+               , array >= 0.4.0.1
+               , range >= 0.1.0.0
+               , template-haskell
+               , parallel >= 3.2.0.6
+               , deepseq >= 1.3.0.2
+               , strict
+               , hspec == 2.*
+               , hspec-expectations >= 0.3.3
+        

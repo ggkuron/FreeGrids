@@ -10,7 +10,7 @@ data EffectCommand = Evolve | ENothing deriving (Eq, Show, Ord)
 data ActionCommand = ActionCommand 
                    { moveCommand :: MoveCommand
                    , effectCommand :: EffectCommand
-                   }
+                   } deriving Show
  
 
-type Commands = M.Map (MapCell, FieldCell) ActionCommand
+type Commands = M.Map WorldCell ActionCommand
