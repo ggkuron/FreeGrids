@@ -8,7 +8,6 @@ import Control.DeepSeq
 
 data CharaProps = CharaProps 
                 { _cellProps :: CellProps
-                -- , _fourSides :: M.Map Direct [F.Bitmap]
                 } 
 makeLenses ''CharaProps
 

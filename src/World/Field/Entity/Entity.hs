@@ -6,18 +6,12 @@ module World.Field.Entity.Entity
 
 import World.Data
 import Control.Lens 
-import Paths_grids
-import qualified FreeGame as F
-
-
 import Control.DeepSeq
-
-F.loadBitmapsWith [|getDataFileName|] "../../../../images"
 
 data TipType = TIP_AMI
              | TIP_Grass
              | TIP_Player
-             deriving (Show, Eq)
+             deriving (Show, Eq, Enum)
 
 data CellProps = CellProps 
                { _block :: Bool 
@@ -46,9 +40,6 @@ makeLenses ''CellTip
 
 class CellEntity e where
         celltip :: e -> CellTip
-
-class CellEntityRender e where
-        cellBMP :: e -> F.Bitmap
 
 instance CellEntity CellTip where
         celltip = id

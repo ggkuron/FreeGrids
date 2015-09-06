@@ -205,6 +205,8 @@ instance Enum MapCell where
 mapCell :: Pair Int Int -> Pair Int Int -> MapCell
 mapCell m f = MapCell (bCell m) (aCell f)
 
+
+
 instance NFData BCell where
     rnf (BCell c) = rnf c `seq` ()
 

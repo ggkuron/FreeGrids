@@ -5,8 +5,14 @@ import World.Data
 import Control.Lens
 import Control.Monad
 import qualified FreeGame as F
+import Paths_grids
 
 import Control.DeepSeq
+
+class CellEntityRender e where
+        cellBMP :: e -> F.Bitmap
+
+F.loadBitmapsWith [|getDataFileName|] "../../static/images"
 
 instance (NFData F.Bitmap) where
     rnf a = a `seq` ()

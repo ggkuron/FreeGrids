@@ -23,6 +23,9 @@ import Data.Maybe (fromJust)
 
 import Debug.Trace
 
+tipList :: WorldIndex w => [w] -> CellProps -> [CellTip]
+tipList r p = [CellTip p $ CellState (fieldCell c) center 0 | c <- r]
+
 fieldPosition :: Coord -> WorldCell -> RCoord -> Coord
 fieldPosition vp c crd = addRCoord (cornerPoint' vp c) crd
 
@@ -59,9 +62,9 @@ instance FieldActor Character where
           stateChange' = stateChange $ c^.charaState
           moveAct :: FieldData ->  MoveCommand -> CharaAction -> CharaState
           moveAct f Nuetral _ = c^.charaState&cellState.elapsedFrames.~elapsed'
-          moveAct f (Move cmd_dir) Stopping = trace "stop" c^.charaState&direct.~cmd_dir
-                                                           &acting.~Walking 
-                                                           &cellState.elapsedFrames.~0
+          moveAct f (Move cmd_dir) Stopping =  c^.charaState&direct.~cmd_dir
+                                                            &acting.~Walking 
+                                                            &cellState.elapsedFrames.~0
           moveAct f (Move cmdDir) Walking 
             | c^.charaState^.direct == cmdDir
             = let cl   = c^.charaState^.cellState^.cell :: WorldCell
@@ -70,10 +73,10 @@ instance FieldActor Character where
                   (rc'', dirs') = nextDirect rc'
                   fc = worldWrap (cellMoves dirs' []) cl
                   fc' =  if blockCheck f fc then cl else fc
-              in traceShow fc' c^.charaState&acting.~(Walking)
-                                            &cellState%~(cell.~fc')
-                                                       .(pos.~rc'')
-                                                       .(elapsedFrames.~actionElapsed)
+              in c^.charaState&acting.~(Walking)
+                              &cellState%~(cell.~fc')
+                                         .(pos.~rc'')
+                                         .(elapsedFrames.~actionElapsed)
             | otherwise 
             =  c^.charaState&acting.~Stopping
                             &cellState.elapsedFrames.~0
@@ -86,7 +89,7 @@ instance FieldActor Character where
           effectAct state Evolve | state^.acting == Stopping = stateChange state Whirlslash 
                                  | state^.acting == Whirlslash = stateForward state Whirlslash 60 
                                  | otherwise =  stateChange state Stopping
-          effectAct state ENothing = traceShow "forward" stateForward state (state^.acting) 60
+          effectAct state ENothing = stateForward state (state^.acting) 60
 
     -- -- empty decl
     effect c cmd = M.insert (c^.charaState^.cellState^.cell) (ActionCommand Nuetral ENothing) cmd

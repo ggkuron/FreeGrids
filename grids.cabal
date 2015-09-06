@@ -9,10 +9,8 @@ Copyright:
 category: Game
 Build-Type: Simple
 Cabal-Version:  >=1.8
-data-files: images/*.png, images/maptips/*.png
+data-files: images/*.png, images/maptips/*.png, src/field.dat
 
-extra-source-files:
-    cell.hs
 
 Executable grids
   main-is:    Main.hs
@@ -24,20 +22,22 @@ Executable grids
                , World.Field.Entity.Entity
                , World.Field.Entity.Character
                , World.Field.Entities
+               , World.Parser
                , World.Command
                , Renderer.Renderer
                , Renderer.Field
-  build-depends: base >= 2.0
-               , free-game >= 1.0
-               , elerea == 2.8.0
+  build-depends: base >= 4.6 && < 5
+               , free-game >= 1.1.81
+               , elerea >= 2.8.0
                , containers >= 0.5.0.0
-               , lens >= 4.1.2
+               , lens 
                , array >= 0.4.0.1
-               , range >= 0.1.0.0
                , template-haskell
                , parallel >= 3.2.0.6
                , deepseq >= 1.3.0.2
                , strict
+               , trifecta
+               , parsers
   ghc-options: -O2 -rtsopts -eventlog -threaded "-with-rtsopts=-N4 -s -l"
 
 test-suite spec
@@ -46,13 +46,12 @@ test-suite spec
     hs-source-dirs: test
                  ,  src
     main-is: Spec.hs
-    build-depends: base >= 2.0
-               , free-game >= 1.0
-               , elerea == 2.8.0
+    build-depends: base >= 4.6 && < 5
+               , free-game >= 1.1.81
+               , elerea >= 2.8.0
                , containers >= 0.5.0.0
-               , lens >= 4.1.2
+               , lens
                , array >= 0.4.0.1
-               , range >= 0.1.0.0
                , template-haskell
                , parallel >= 3.2.0.6
                , deepseq >= 1.3.0.2

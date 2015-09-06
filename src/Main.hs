@@ -15,6 +15,7 @@ import qualified FRP.Elerea.Simple as E
 import World.Data
 import World.Field.Field
 import World.Field.Entities
+import World.Parser
 import World.Command
 import Renderer.Renderer
 import Renderer.Field
@@ -25,6 +26,7 @@ import Paths_grids
 
 import qualified Data.Strict.Tuple as ST
 import Control.Parallel.Strategies
+
 import Debug.Trace
 
 
@@ -40,9 +42,9 @@ mainLoop = do
         wholeRect = (0,0,defaultWidth, defaultHeight)
         meInitialIndex = mapCell (1:!:1) (5:!:5) :: MapCell
         me = Player $ Character meEnty (meInitialState meInitialIndex) :: Player
-        initialFieldData = retrieveFieldData meInitialIndex :: FieldData
         initialCmd = M.fromList [] :: Commands
 
+    initialFieldData <- F.embedIO $ retrieveFieldData meInitialIndex 
     (directionKey, directionKeySink) <- F.embedIO $ E.external []
 
     network <- F.embedIO $ do
@@ -127,18 +129,13 @@ keyB = F.KeyB
 
 
 mapChanger :: Player -> FieldData -> FieldData
-mapChanger c f = let minx = c^.playerChara^.charaState^.cellState^.cell
-                  in retrieveFieldData minx
+mapChanger c f = f
+               
 
-retrieveFieldData :: WorldIndex w => w -> FieldData
-retrieveFieldData wi = let idxs = aroundCells (fieldCell wi)
-                        in fieldMap
-     where
-         aroundCells :: WorldCell -> [WorldCell]
-         aroundCells cp = let halfView = Cell(8:!:10) 
-                              in map fromCell $ aroundCells2 (cellValue cp) halfView 
-
--- Data
+-- retrieveFieldData :: WorldIndex w => w -> FieldData
+retrieveFieldData wi = do
+        filepath <- getDataFileName "static/map/field.dat"
+        fieldMap filepath
 
 meEnty :: CharaProps
 meEnty =  CharaProps (CellProps True TIP_Player) 
@@ -148,29 +145,13 @@ meInitialState :: WorldIndex w => w -> CharaState
 meInitialState wi = CharaState 100 DOWN Stopping (CellState (fieldCell wi) center 0) 
 
 
-tipList :: WorldIndex w => [w] -> TipType -> Bool -> [CellTip]
-tipList r t b = [createTip t (fieldCell c) | c <- r]
-    where createTip t c = CellTip (CellProps b t) $ CellState c center 0
-
-
 createMap :: [(BCell, [(Cell, Cell, TipType, Bool)], [Character])] -> FieldData
-createMap props = FieldData (concat $ map (\(bc,cp,_) -> concat $ map (\(s,e,p,b) -> tipList [MapCell bc a | a <- [(ACell s) .. (ACell e)]] p b) cp) props)
+createMap props = FieldData (concat $ map (\(bc,cp,_) -> concat $ map (\(s,e,t,b) -> tipList [MapCell bc a | a <- [(ACell s) .. (ACell e)]] $ CellProps b t) cp) props)
                             (concat $ map (\(_,_,c) -> c) props)
 
-fieldMap :: FieldData
-fieldMap = createMap [(bCell(1 :!: 1)
-                     , [((Cell(1 :!: 1)), (Cell(15 :!: 15)), TIP_AMI, False)
-                       ,((Cell(10 :!: 1)), (Cell(14 :!: 5)), TIP_Grass, False)
-                       ,((Cell(4 :!: 4)), (Cell(4 :!: 4)), TIP_Grass, False)
-                     ]
-                     , []
-                     )
-                     ,(bCell(1 :!: 2)
-                     , [((Cell(1 :!: 1)), (Cell(1 :!: 10)), TIP_AMI, False)
-                       ,((Cell(1 :!: 1)), (Cell(15 :!: 15)), TIP_Grass, False)
-                       ,((Cell(4 :!: 4)), (Cell(4 :!: 4)), TIP_Grass, False)
-                     ]
-                     , []
-                     )
-                     ]
+-- fieldMap :: FieldData
+fieldMap filepath = do
+        tips <- parseFieldData filepath
+        return $ FieldData (join.join $ fromJust tips) []
+           
 
