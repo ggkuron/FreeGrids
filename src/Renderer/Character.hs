@@ -18,7 +18,7 @@ instance CellEntityRender CellTip where
                     TIP_Grass -> _maptips_grass_png
 
 instance CellEntityRender Character where
-        cellBMP c = let elapsed = c^.charaState^.cellState^.elapsedFrames
+        cellBMP c = let elapsed = c^.charaState^.cellState^.actionStep
                         state = c^.charaState^.acting
                         dir = c^.charaState^.direct
                      in case c^.charaProps^.cellProps^.tipType of

@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module World.Data.Cell
 ( module World.Data.Cell
@@ -36,4 +37,16 @@ cellDistance :: Cell -> Cell -> Int
 cellDistance a b = let c = a -b 
                        in max (cellRow c) (cellCol c)
 
+class Convertible a b where
+        to :: a -> b
+        from :: b -> a
+        wrap :: (a -> a) -> b -> b
+        wrap f a = to $ f (from a)
+        wrap2 :: (a -> a -> a) -> b -> b -> b
+        wrap2 f a b = to $ f (from a) (from b)
+        wrapF :: Functor f => (a -> f a) -> b -> f b
+        wrapF f a = fmap to $ f (from a)
 
+instance Convertible Cell Cell where
+        to = id
+        from = id

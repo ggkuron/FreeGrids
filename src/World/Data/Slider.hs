@@ -6,10 +6,10 @@
 
 module World.Data.Slider 
 ( module World.Data.Slider
-, module Control.Lens
+, module Control.Lens 
 ) where
 
-import Control.Lens 
+import Control.Lens hiding(to, from)
 import Prelude hiding(max, min)
 
 data Bound a = Bound (a, a) a

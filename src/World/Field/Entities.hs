@@ -35,10 +35,10 @@ cellPosition vp c crd = addRCoord (cornerPoint' vp c) crd
 
 stateChange :: CharaState -> CharaAction -> CharaState
 stateChange cs act  = cs&acting.~act
-                        &cellState.elapsedFrames.~0
+                        &cellState.actionStep.~0
 
-stateForward state act actionEnd | (state^.cellState^.elapsedFrames) > actionEnd = stateChange state Stopping
-                                 | otherwise = state&cellState.elapsedFrames+~1
+stateForward state act actionEnd | (state^.cellState^.actionStep) > actionEnd = stateChange state Stopping
+                                 | otherwise = state&cellState.actionStep+~1
 
 nextDirect :: RCoord -> (RCoord, [Direct])
 nextDirect (rcx :!: rcy) = 
@@ -56,35 +56,35 @@ instance FieldActor Character where
             action  = c^.charaState^.acting
         in c&charaState.~(effectAct (moveAct f moveCmd action) effectCmd)
         where
-          elapsed = c^.charaState^.cellState^.elapsedFrames
+          elapsed = c^.charaState^.cellState^.actionStep
           elapsed' = if elapsed > frameLoop then 0 else elapsed + 1
           actionElapsed = if elapsed > 32 then 0 else elapsed + 1
           stateChange' = stateChange $ c^.charaState
           moveAct :: FieldData ->  MoveCommand -> CharaAction -> CharaState
-          moveAct f Nuetral _ = c^.charaState&cellState.elapsedFrames.~elapsed'
+          moveAct f Nuetral _ = c^.charaState&cellState.actionStep.~elapsed'
           moveAct f (Move cmd_dir) Stopping =  c^.charaState&direct.~cmd_dir
                                                             &acting.~Walking 
-                                                            &cellState.elapsedFrames.~0
+                                                            &cellState.actionStep.~0
           moveAct f (Move cmdDir) Walking 
             | c^.charaState^.direct == cmdDir
-            = let cl   = c^.charaState^.cellState^.cell :: WorldCell
-                  rc   = c^.charaState^.cellState^.pos :: RCoord
+            = let cl  = c^.charaState^.cellState^.cell :: WorldCell
+                  rc  = c^.charaState^.cellState^.pos :: RCoord
                   rc' = slideRCoord rc  (c^.charaState^.direct) :: RCoord
                   (rc'', dirs') = nextDirect rc'
-                  fc = worldWrap (cellMoves dirs' []) cl
+                  fc = wrap (cellMoves dirs' []) cl
                   fc' =  if blockCheck f fc then cl else fc
               in c^.charaState&acting.~(Walking)
                               &cellState%~(cell.~fc')
                                          .(pos.~rc'')
-                                         .(elapsedFrames.~actionElapsed)
+                                         .(actionStep.~actionElapsed)
             | otherwise 
             =  c^.charaState&acting.~Stopping
-                            &cellState.elapsedFrames.~0
+                            &cellState.actionStep.~0
           moveAct f (Stop dir) _ = c^.charaState&acting.~Stopping
-                                                &cellState.elapsedFrames.~actionElapsed
+                                                &cellState.actionStep.~actionElapsed
                                                 &direct.~dir 
           moveAct f _ _ = c^.charaState&acting.~Stopping
-                                         &cellState.elapsedFrames.~0
+                                       &cellState.actionStep.~0
 
           effectAct state Evolve | state^.acting == Stopping = stateChange state Whirlslash 
                                  | state^.acting == Whirlslash = stateForward state Whirlslash 60 

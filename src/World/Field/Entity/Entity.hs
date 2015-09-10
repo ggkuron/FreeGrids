@@ -1,11 +1,13 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module World.Field.Entity.Entity
 ( module World.Field.Entity.Entity
 , module Control.Lens 
 ) where
 
 import World.Data
-import Control.Lens 
+import Control.Lens hiding(to, from)
 import Control.DeepSeq
 
 data TipType = TIP_AMI
@@ -26,7 +28,7 @@ instance NFData CellProps where
 data CellState = CellState 
                { _cell :: WorldCell
                , _pos :: RCoord 
-               , _elapsedFrames :: Int 
+               , _actionStep :: Int 
                } deriving (Show)
 
 makeLenses ''CellState
@@ -50,7 +52,8 @@ instance NFData CellState where
 instance NFData CellTip where
     rnf ci = rnf (ci^.props) `seq` rnf (ci^.state) `seq` ()
 
-instance CellHolder CellTip where
-    cellValue ci = cellValue  $ ci^.state^.cell
+instance Convertible Cell CellTip where
+    from ci = from  $ ci^.state^.cell
+    to t = CellTip (CellProps True TIP_Player) (CellState (to t) center 0)
 
 

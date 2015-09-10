@@ -33,13 +33,13 @@ prsCSNum =  do
 
 prsCell = parens prsCSNum
 
-prsCellSpan = parens $ do
+prsCellSpan = brackets $ do
                   start <- prsCSNum
                   colon
                   end <- prsCSNum
                   return (start, end)
 
-prsElem = brackets $ token $ do 
+prsElem = parens $ token $ do 
     tipType <- integer
     spaces
     block <- char 'f' <|> char 't'

@@ -52,7 +52,7 @@ mainLoop = do
             cmd      <- E.transfer3 initialCmd readCommands directionKey player' field'
             player   <- E.transfer2 me (\c f p -> p&playerChara.~(movePlayer c f (p^.playerChara))) cmd field' :: (E.SignalGen (E.Signal Player))
             player'  <- E.delay me player :: (E.SignalGen (E.Signal Player))
-            field    <- E.transfer initialFieldData mapChanger player :: (E.SignalGen (E.Signal FieldData))
+            field    <- E.transfer initialFieldData (mapChanger initialFieldData) player :: (E.SignalGen (E.Signal FieldData))
             field'   <- E.delay initialFieldData field :: (E.SignalGen (E.Signal FieldData))
             viewport <- E.transfer2 initial_origin moveView player field :: (E.SignalGen (E.Signal Coord))
             return $ render wholeRect <$> player <*> viewport <*> field
@@ -66,10 +66,10 @@ readCommands keys p f cmd =
     let dirInput = listToMaybe $
                       concat $ map (\k -> maybeToList $ M.lookup k keyDirectionMap) keys :: Maybe Direct
         inx = p^.playerChara^.charaState^.cellState^.cell :: WorldCell
-        blocks = map cellValue $ filter (\t-> t^.props^.block) (f^.fieldTips)
+        blocks = map from $ filter (\t-> t^.props^.block) (f^.fieldTips)
         mACmd = fromJust $ M.lookup inx cmd ::ActionCommand  
         effectCmd = effectCommand mACmd
-        blockedDir = adjacentDirections blocks (cellValue . fieldCell $ inx) :: [Direct]
+        blockedDir = adjacentDirections blocks (from . fieldCell $ inx) :: [Direct]
         moveCmd :: MoveCommand
         moveCmd = case dirInput of
                       Just dir | dir `elem` blockedDir -> Stop dir
@@ -114,7 +114,7 @@ render displaySize me vp f = do
         renderOwn  p = clip $ p^.playerChara 
 
         renderBackGround ::  Player -> Coord -> FieldData -> F.Frame ()
-        renderBackGround c vp f = tileMaps f vp cellLong
+        renderBackGround c vp f = tileMaps f vp 
 
 keyDirectionMap:: M.Map F.Key Direct
 keyDirectionMap = M.fromList 
@@ -128,11 +128,11 @@ keyA = F.KeyA
 keyB = F.KeyB
 
 
-mapChanger :: Player -> FieldData -> FieldData
-mapChanger c f = f
+mapChanger :: FieldData -> Player -> FieldData -> FieldData
+mapChanger i c f = aroundField (c^.playerChara^.charaState^.cellState^.cell) (worldCell(15:!:18)) i
                
 
--- retrieveFieldData :: WorldIndex w => w -> FieldData
+retrieveFieldData :: WorldIndex w => w -> IO FieldData
 retrieveFieldData wi = do
         filepath <- getDataFileName "static/map/field.dat"
         fieldMap filepath

@@ -25,28 +25,18 @@ class FieldObjectR a where
 
 tileMaps :: FieldData ->
             Coord ->  -- viewpoint
-            (Coord -> Double) -> -- scaler
             F.Frame ()
-tileMaps fd vp sfunc =
-    forM_ (map (\t -> let c = t^.state^.cell 
-                          bmp = cellBMP t
-                          trans = fieldPosition vp c center
-                      in ( trans
-                         , (sfunc trans) / cellStatic * 1.08
-                         , bmp 
-                         ) 
-                ) (fd^.fieldTips :: [CellTip]) 
-          ) $ \(crd, s, bmp) -> F.translate crd $ F.scale (V2 s s) $ F.bitmap bmp
-
+tileMaps fd vp =
+    mapM_  (\(crd, s, bmp) -> F.translate crd $ F.scale (V2 s s) $ F.bitmap bmp)
+           $ flip map (fd^.fieldTips) $
+               (\t -> let trans = fieldPosition vp (t^.state^.cell) center
+                       in (trans , (cellLong trans) / cellStatic * 1.02, (cellBMP t)))
 
 instance FieldObjectR Character where
     clip c vp f = 
-        let elapsed = c^.charaState^.cellState^.elapsedFrames
-            cdir = c^.charaState^.direct
-            abpos = charaPos vp c
-            action = c^.charaState^.acting
-            cc = c^.charaState^.cellState^.cell
+        let action = c^.charaState^.acting
         in do 
-          when (action == Whirlslash) $ F.color F.red $ fillCells vp $ worldWrapM (aroundCells 1) cc
-          F.translate abpos $ F.bitmap $ cellBMP c
+          when (action == Whirlslash) 
+              $ F.color F.red $ fillCells vp $ wrapF (aroundCells 1) (c^.charaState^.cellState^.cell)
+          F.translate (charaPos vp c) $ F.bitmap $ cellBMP c
 

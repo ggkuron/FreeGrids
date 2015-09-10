@@ -2,6 +2,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module World.Data
 ( module World.Data.Cell
@@ -10,13 +12,16 @@ module World.Data
 , V2(..)
 ) where
 
+import Prelude hiding (sum)
 import World.Data.Cell
 import World.Data.Slider
 import Data.Maybe (listToMaybe, catMaybes)
 import Data.List ((\\))
+import qualified Data.Foldable as F
 
 -- import Control.Applicative
-import FreeGame (V2(..), Vec2)
+import FreeGame (Vec2)
+import Linear.V2
 
 import Control.Parallel.Strategies
 import Control.DeepSeq
@@ -125,45 +130,44 @@ adjacentDirection ours theirs = listToMaybe $ filter (\d -> adjacentCell d ours 
 
 newtype ACell = ACell Cell deriving (Eq, Show, Ord)
 newtype BCell = BCell Cell deriving (Eq, Show, Ord)
-newtype WorldCell = WorldCell Cell deriving (Eq, Show, Ord)
+newtype WorldCell = WorldCell Cell deriving (Eq, Show)
 
-class CellHolder a where
-    cellValue :: a -> Cell
+instance Ord WorldCell where
+        l`compare` r = (fromEnum l) `compare` (fromEnum r) 
 
-class (Enum a, CellHolder a) => WorldIndex a where
+class (Enum a, Convertible Cell a) => WorldIndex a where
     fieldCell :: a -> WorldCell
-    fromCell :: Cell -> a
-    fromCell (Cell (r :!: c)) = toEnum $ (15*250)*(r-1) + c - 1
-    worldWrap :: (Cell -> Cell) -> a -> a
-    worldWrap f w = fromCell $ f (cellValue w)
-    worldWrapM :: Functor m => (Cell -> m Cell) -> a -> m a
-    worldWrapM f a = fmap (\c -> fromCell $ c ) $ f (cellValue a)
+    toWorldIndex :: Cell -> a
+    toWorldIndex (Cell (r :!: c)) = toEnum $ (15*250)*(r-1) + c - 1
 
-instance CellHolder ACell where
-    cellValue (ACell c) = c
-instance CellHolder BCell where
-    cellValue (BCell c) = c
-instance CellHolder WorldCell where
-    cellValue (WorldCell c) = c
-instance CellHolder MapCell where
-    cellValue = cellValue . fieldCell
+instance Convertible Cell ACell where
+    from (ACell c) = c
+    to = ACell
+instance Convertible Cell BCell where
+    from (BCell c) = c
+    to = BCell
+instance Convertible Cell WorldCell where
+    from (WorldCell c) = c
+    to = WorldCell
+instance Convertible Cell MapCell where
+    from = from . fieldCell
+    to = toWorldIndex
 
 instance WorldIndex MapCell where
-    fieldCell w@(MapCell 
-               (BCell(Cell(mr:!:mc)))
-               (ACell(Cell(fr:!:fc)))
-            ) = worldCell (15*(mr-1)+fr :!: 15*(mc-1)+fc) 
+    fieldCell (MapCell 
+                (BCell(Cell(mr:!:mc)))
+                (ACell(Cell(fr:!:fc)))
+              ) = worldCell (15*(mr-1)+fr :!: 15*(mc-1)+fc) 
 
 instance WorldIndex WorldCell where
     fieldCell = id
-    worldWrap f w = WorldCell $ f (cellValue w)
 
 aCell :: Pair Int Int -> ACell
-aCell t = ACell $ Cell t
+aCell = ACell . Cell
 bCell :: Pair Int Int -> BCell
-bCell t = BCell $ Cell t
+bCell = BCell . Cell
 worldCell :: Pair Int Int -> WorldCell
-worldCell t = WorldCell $ Cell t
+worldCell = WorldCell . Cell
 
 data MapCell = MapCell BCell ACell
     deriving (Show, Eq, Ord)
@@ -205,18 +209,12 @@ instance Enum MapCell where
 mapCell :: Pair Int Int -> Pair Int Int -> MapCell
 mapCell m f = MapCell (bCell m) (aCell f)
 
-
-
 instance NFData BCell where
     rnf (BCell c) = rnf c `seq` ()
-
 instance NFData ACell where
     rnf (ACell c) = rnf c `seq` ()
-
 instance NFData WorldCell where
     rnf (WorldCell c) = rnf c `seq` ()
-
-   
 instance NFData MapCell where
     rnf (MapCell a b) = rnf a `seq` rnf b `seq` ()
 
@@ -243,46 +241,42 @@ slideRCoord (rcx :!: rcy) DOWN  = (rcx :!: _slideUpX rcy)
 
 normalMapping :: WorldCell -> Coord
 normalMapping mc =
-    let (Cell (r :!: c)) = (cellValue mc) * (Cell (cellStatic:!:cellStatic))
+    let (Cell (r :!: c)) = (from mc) * (Cell (cellStatic:!:cellStatic))
      in V2 (fromIntegral c) (fromIntegral r)
 
 rectCell :: Coord -> WorldCell -> [Coord]
 rectCell origin c = map (\e -> cornerPoint origin e c) allEdge 
 
 cellLong :: Coord -> Double 
-cellLong v@(V2 x y) = abs $ x'' - x'
-    where x'  = normalXmap v
-          x'' = normalXmap $ V2 (x+cellStatic) y
+cellLong (V2 _ y) = cellLong' y
 
-normalXmap :: Coord -> Double
-normalXmap (V2 x y) = x + transMod * xdiff * ydiff
-    where ydiff = 1 - y/defaultHeight 
-          xdiff = defaultWidth/2 - x
+cellLong' :: Double -> Double
+cellLong' y = y / 60 + 30
+
+vanishingPoint = V2 (400) (-2400)
+
+normalXmap :: Coord -> Coord
+normalXmap v = v&_x+~(transMod * (vanishingPoint^._x - v^._x) * (1 - v^._y/defaultHeight))
+
+normalYmap :: Coord -> Coord
+normalYmap v = v&_y*~(23/30)
 
 addRCoord :: Coord -> RCoord -> Coord
-addRCoord crd (rx :!: ry) = crd + V2 (fromR crd rx) (fromR crd ry)
+addRCoord crd (rx :!: ry) = crd + V2 (fromR rx) (fromR ry)
     where 
-      fromR :: Coord -> Slider -> Double
-      fromR crd' rc = let persent srd = fromIntegral $ bval srd :: Double
-                          sliderSize = cellLong crd' / 2
-                       in sliderSize * persent rc / 100
+      fromR :: Slider -> Double
+      fromR rc = let persent = fromIntegral.bval 
+                     sliderSize = cellLong crd / 2
+                  in sliderSize * persent rc / 100
 
 normalTrans :: Coord -> Coord
-normalTrans v@(V2 x y) = V2 (normalXmap v) y'
-    where
-        n  = ceiling y `div` cellStatic 
-        b  = fromIntegral $ round y `mod` (cellStatic::Integer) :: Double
-        cellLong' yy = cellLong (V2 x yy)
-        y' = cellLong' y * b / cellStatic 
-                + if n <= 0 then - cellStatic
-                            else iterate (\t -> t + cellLong' t) 0 !! n  
-                - cellStatic
- 
+normalTrans = normalXmap.normalYmap 
+
 cornerPoint :: Coord -> Edge -> WorldCell -> Coord
-cornerPoint vp edge c = normalTrans $ (+) vp (normalMapping $ worldWrap (celledge edge) c)
+cornerPoint vp edge c = normalTrans $ vp + (normalMapping $ wrap (celledge edge) c)
 
 cornerPoint' :: Coord -> WorldCell -> Coord
-cornerPoint' vp c = normalTrans $ (+) vp (normalMapping c)
+cornerPoint' vp c = normalTrans $ vp + (normalMapping c)
                        
 cornerPointOrigin :: Coord
 cornerPointOrigin = cornerPoint' (V2 0 0) $ (worldCell(1:!:1))
